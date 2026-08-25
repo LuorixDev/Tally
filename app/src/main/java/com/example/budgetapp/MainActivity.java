@@ -38,6 +38,7 @@ import com.example.budgetapp.widget.TodaySummaryWidget;
 import com.google.android.accessibility.selecttospeak.SelectToSpeakService;
 import com.example.budgetapp.ui.SettingsActivity;
 import com.example.budgetapp.util.AssistantConfig;
+import com.example.budgetapp.util.RootKeepAliveManager;
 import com.example.budgetapp.viewmodel.FinanceViewModel;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
@@ -374,6 +375,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkPermissions() {
+        AssistantConfig config = new AssistantConfig(this);
+
+        if (config.isEnabled() && !isAccessibilitySettingsOn()
+                && RootKeepAliveManager.isEnabled(this)
+                && RootKeepAliveManager.isAutoAccessibilityEnabled(this)) {
+            RootKeepAliveManager.applyAsync(this, () -> {
+                if (!isFinishing() && !isDestroyed()) checkPermissionsAfterRootRestore();
+            });
+            return;
+        }
+        checkPermissionsAfterRootRestore();
+    }
+
+    private void checkPermissionsAfterRootRestore() {
         AssistantConfig config = new AssistantConfig(this);
 
         if (config.isEnabled() && !isAccessibilitySettingsOn()) {

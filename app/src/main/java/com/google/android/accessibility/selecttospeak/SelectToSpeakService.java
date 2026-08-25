@@ -563,6 +563,9 @@ public class SelectToSpeakService extends AccessibilityService {
 
     // 2. 核心主方法（必须加上 long transactionTime）
     private void showConfirmWindow(double amount, int type, String category, String note, int matchedAssetId, String initialSymbol, long transactionTime) {
+        // Let notification accounting suppress the duplicate notification emitted immediately after this popup.
+        getSharedPreferences("app_prefs", MODE_PRIVATE).edit()
+                .putLong("last_auto_accounting_trigger", System.currentTimeMillis()).apply();
         if (isWindowShowing) return;
         selectedSubCategory = null;
 

@@ -462,6 +462,8 @@ public class SettingsActivity extends AppCompatActivity {
         findViewById(R.id.btn_default_page).setOnClickListener(v -> startActivity(new Intent(this, DefaultPageActivity.class)));
         findViewById(R.id.btn_toggle_night_mode).setOnClickListener(v -> startActivity(new Intent(this, ThemeSettingsActivity.class)));
         findViewById(R.id.btn_assistant_setting).setOnClickListener(v -> startActivity(new Intent(this, AssistantManagerActivity.class)));
+        findViewById(R.id.btn_notification_accounting).setOnClickListener(v -> startActivity(new Intent(this, NotificationAccountingActivity.class)));
+        findViewById(R.id.btn_root_keep_alive).setOnClickListener(v -> startActivity(new Intent(this, RootKeepAliveSettingsActivity.class)));
         findViewById(R.id.btn_overtime_setting).setOnClickListener(v -> showSetOvertimeRateDialog());
         findViewById(R.id.btn_default_record_display).setOnClickListener(v -> showDefaultRecordDisplayDialog());
 
