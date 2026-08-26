@@ -1341,6 +1341,8 @@ public class DetailsFragment extends Fragment {
                     updateT.subCategory = selectedSubCategory[0];
                     updateT.photoPath = currentPhotoPath[0];
                     updateT.excludeFromBudget = isExcludedFromBudget[0];
+                    updateT.spreadStartDate = existingTransaction.spreadStartDate;
+                    updateT.spreadEndDate = existingTransaction.spreadEndDate;
 
                     viewModel.updateTransactionWithAssetSync(existingTransaction, updateT);
                 } else {

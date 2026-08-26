@@ -68,6 +68,19 @@ public class BudgetCalculatorTest {
         assertEquals(3.33, BudgetCalculator.dailyBudget(plan, end), 0.000001);
     }
 
+    @Test
+    public void expenseBetween_amortizesTransactionAcrossRange() {
+        LocalDate purchase = LocalDate.of(2026, 1, 1);
+        Transaction transaction = new Transaction(millis(purchase), 0, "购物", 10.01);
+        transaction.spreadStartDate = millis(purchase);
+        transaction.spreadEndDate = millis(purchase.plusDays(2));
+
+        assertEquals(3.34, BudgetCalculator.expenseBetween(
+                Arrays.asList(transaction), millis(purchase), millis(purchase.plusDays(1))), 0.000001);
+        assertEquals(10.01, BudgetCalculator.expenseBetween(
+                Arrays.asList(transaction), millis(purchase), millis(purchase.plusDays(3))), 0.000001);
+    }
+
     private static long millis(LocalDate date) {
         return date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }

@@ -16,6 +16,11 @@ public class Transaction {
     @PrimaryKey(autoGenerate = true)
     public int id;
     public long date;
+    /** Optional inclusive date range used only for budget amortization. */
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    public long spreadStartDate;
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    public long spreadEndDate;
     public int type; // 0支出, 1收入, 2转账
     public String category;
     public double amount;

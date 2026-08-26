@@ -7,6 +7,7 @@ import com.example.budgetapp.database.Transaction;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,10 +30,27 @@ public final class BudgetCalculator {
         double total = 0;
         if (transactions == null) return total;
         for (Transaction t : transactions) {
-            if (t.type == 0 && t.date >= start && t.date < end
-                    && !t.excludeFromBudget && t.type != 2
+            if (t.type == 0 && !t.excludeFromBudget && t.type != 2
                     && !"资产互转".equals(t.category)) {
-                total += t.amount;
+                LocalDate spreadStart = toDate(t.spreadStartDate);
+                LocalDate spreadEnd = toDate(t.spreadEndDate);
+                if (t.spreadStartDate > 0 && t.spreadEndDate >= t.spreadStartDate
+                        && !spreadEnd.isBefore(spreadStart)) {
+                    LocalDate queryStart = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate();
+                    LocalDate queryEnd = Instant.ofEpochMilli(Math.max(start, end - 1))
+                            .atZone(ZoneId.systemDefault()).toLocalDate();
+                    long days = ChronoUnit.DAYS.between(spreadStart, spreadEnd) + 1;
+                    LocalDate overlapStart = spreadStart.isAfter(queryStart) ? spreadStart : queryStart;
+                    LocalDate overlapEnd = spreadEnd.isBefore(queryEnd) ? spreadEnd : queryEnd;
+                    if (!overlapEnd.isBefore(overlapStart)) {
+                        long first = ChronoUnit.DAYS.between(spreadStart, overlapStart);
+                        long count = ChronoUnit.DAYS.between(overlapStart, overlapEnd) + 1;
+                        List<Double> slices = distributeEvenly(t.amount, (int) days);
+                        for (long i = 0; i < count; i++) total += slices.get((int) (first + i));
+                    }
+                } else {
+                    if (t.date >= start && t.date < end) total += t.amount;
+                }
             }
         }
         return total;
