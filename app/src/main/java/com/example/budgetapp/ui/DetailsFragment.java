@@ -615,6 +615,10 @@ public class DetailsFragment extends Fragment {
      * 显示日期选择器，选择完日期后自动弹出时间选择器
      */
     private void showTransactionDatePicker(java.util.Calendar calendar, Runnable updateDisplay) {
+        showTransactionDatePicker(calendar, updateDisplay, false);
+    }
+
+    private void showTransactionDatePicker(java.util.Calendar calendar, Runnable updateDisplay, boolean dateOnly) {
         if (getContext() == null) return;
 
         final BottomSheetDialog dialog = new BottomSheetDialog(getContext());
@@ -676,7 +680,8 @@ public class DetailsFragment extends Fragment {
             calendar.set(java.util.Calendar.MONTH, npMonth.getValue() - 1);
             calendar.set(java.util.Calendar.DAY_OF_MONTH, npDay.getValue());
             dialog.dismiss();
-            showTransactionTimePicker(calendar, updateDisplay);
+            if (dateOnly) updateDisplay.run();
+            else showTransactionTimePicker(calendar, updateDisplay);
         });
 
         dialog.show();
@@ -1232,8 +1237,8 @@ public class DetailsFragment extends Fragment {
             tvSpreadEnd.setText("摊销结束 " + spreadFormat.format(spreadEnd.getTime()));
         };
         updateSpreadDisplay.run();
-        tvSpreadStart.setOnClickListener(v -> showTransactionDatePicker(spreadStart, updateSpreadDisplay));
-        tvSpreadEnd.setOnClickListener(v -> showTransactionDatePicker(spreadEnd, updateSpreadDisplay));
+            tvSpreadStart.setOnClickListener(v -> showTransactionDatePicker(spreadStart, updateSpreadDisplay, true));
+            tvSpreadEnd.setOnClickListener(v -> showTransactionDatePicker(spreadEnd, updateSpreadDisplay, true));
 
         // 点击日期可修改
         tvDate.setClickable(true);
