@@ -16,6 +16,8 @@ import androidx.lifecycle.Transformations;
 import com.example.budgetapp.database.AppDatabase;
 import com.example.budgetapp.database.AssetAccount;
 import com.example.budgetapp.database.AssetAccountDao;
+import com.example.budgetapp.database.BudgetPlan;
+import com.example.budgetapp.database.BudgetPlanDao;
 import com.example.budgetapp.database.Goal;
 import com.example.budgetapp.database.GoalDao;
 import com.example.budgetapp.database.RenewalItem;
@@ -23,8 +25,17 @@ import com.example.budgetapp.database.Transaction;
 import com.example.budgetapp.database.TransactionDao;
 import com.example.budgetapp.widget.MonthSummaryWidget;
 import com.example.budgetapp.widget.TodaySummaryWidget;
+import com.example.budgetapp.util.AutoCategoryRule;
+import com.example.budgetapp.util.AutoCategoryRuleManager;
+import com.example.budgetapp.util.BudgetCalculator;
 
 import java.util.List;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Map;
 
 /**
  * 核心 ViewModel：管理所有财务数据，包括账单、资产和预算存储目标。
@@ -33,11 +44,13 @@ public class FinanceViewModel extends AndroidViewModel {
     private final TransactionDao transactionDao;
     private final AssetAccountDao assetDao;
     private final GoalDao goalDao; // 新增 GoalDao
+    private final BudgetPlanDao budgetPlanDao;
     private final AppDatabase database; // 显式持有数据库引用以供 DAO 访问
 
     private final LiveData<List<Transaction>> allTransactions;
     private final LiveData<List<AssetAccount>> allAssets;
     private final LiveData<List<Goal>> allGoals; // 新增 LiveData 观察存储目标
+    private final LiveData<List<BudgetPlan>> allBudgetPlans;
 
     // ================= 新增：动态查询所需变量 =================
     // 存储当前请求的时间范围：[0]是start，[1]是end
@@ -54,11 +67,13 @@ public class FinanceViewModel extends AndroidViewModel {
         transactionDao = database.transactionDao();
         assetDao = database.assetAccountDao();
         goalDao = database.goalDao(); // 初始化新 DAO
+        budgetPlanDao = database.budgetPlanDao();
 
         // 3. 初始化 LiveData (观察者模式)
         allTransactions = transactionDao.getAllTransactions();
         allAssets = assetDao.getAllAssets();
         allGoals = goalDao.getAllGoals(); // 获取所有目标
+        allBudgetPlans = budgetPlanDao.getAllPlans();
 
         // 新增：利用 Transformations.switchMap 实现只要 currentRangeFilter 变化，就自动去数据库查新范围的数据
         rangeTransactions = Transformations.switchMap(currentRangeFilter, range -> {
@@ -67,6 +82,21 @@ public class FinanceViewModel extends AndroidViewModel {
             }
             return transactionDao.getTransactionsByRangeLive(range[0], range[1]);
         });
+        migrateLegacyBudgetIfNeeded();
+    }
+
+    private void migrateLegacyBudgetIfNeeded() {
+        AppDatabase.databaseWriteExecutor.execute(() -> {
+            if (!budgetPlanDao.getAllPlansSync().isEmpty()) return;
+            SharedPreferences prefs = getApplication().getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
+            float amount = prefs.getFloat("monthly_budget", 0f);
+            if (amount <= 0) return;
+            LocalDate start = LocalDate.now().withDayOfMonth(1);
+            long legacyStart = prefs.getLong("budget_start_time", 0);
+            if (legacyStart > 0) start = java.time.Instant.ofEpochMilli(legacyStart).atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
+            budgetPlanDao.insert(new BudgetPlan("旧版月度预算", start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(), end.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(), amount));
+        });
     }
 
     /**
@@ -74,6 +104,7 @@ public class FinanceViewModel extends AndroidViewModel {
      */
     public void addTransactionWithAssetSync(Transaction transaction) {
         AppDatabase.databaseWriteExecutor.execute(() -> {
+            applyAutoCategoryRule(transaction);
             database.runInTransaction(() -> {
                 // 1. 处理己方支付账户（如微信、支付宝）的资产变更
                 if (transaction.assetId != 0) {
@@ -140,10 +171,30 @@ public class FinanceViewModel extends AndroidViewModel {
 
     public void addTransaction(Transaction transaction) {
         AppDatabase.databaseWriteExecutor.execute(() -> {
+            applyAutoCategoryRule(transaction);
             transactionDao.insert(transaction);
             com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
             notifyWidgetUpdate(); // 【新增】
         });
+    }
+
+    /** Applies user classification rules to manually created and AI-created transactions. */
+    private void applyAutoCategoryRule(Transaction transaction) {
+        if (transaction == null || transaction.note == null) return;
+        AutoCategoryRule rule = AutoCategoryRuleManager.findMatch(
+                getApplication(), "", transaction.note, transaction.type);
+        if (rule != null) {
+            transaction.type = rule.getTargetType();
+            transaction.category = rule.getCategory();
+            transaction.subCategory = rule.getSubCategory();
+            return;
+        }
+        AutoCategoryRuleManager.DefaultCategory fallback = AutoCategoryRuleManager.findDefault(
+                getApplication(), "", transaction.type);
+        if (fallback != null) {
+            transaction.category = fallback.category;
+            transaction.subCategory = fallback.subCategory;
+        }
     }
 
     public void deleteTransaction(Transaction transaction) {
@@ -333,6 +384,60 @@ public class FinanceViewModel extends AndroidViewModel {
 
     public LiveData<List<Goal>> getAllGoals() {
         return allGoals;
+    }
+
+    public LiveData<List<BudgetPlan>> getAllBudgetPlans() {
+        return allBudgetPlans;
+    }
+
+    public void insertBudgetPlan(BudgetPlan plan) {
+        AppDatabase.databaseWriteExecutor.execute(() -> {
+            budgetPlanDao.insert(plan);
+            com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
+        });
+    }
+
+    public void updateBudgetPlan(BudgetPlan plan) {
+        AppDatabase.databaseWriteExecutor.execute(() -> {
+            budgetPlanDao.update(plan);
+            com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
+        });
+    }
+
+    public void deleteBudgetPlan(BudgetPlan plan) {
+        AppDatabase.databaseWriteExecutor.execute(() -> {
+            budgetPlanDao.delete(plan);
+            com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
+        });
+    }
+
+    /** Settles each expired plan once and evenly adds its non-negative daily surplus to goals. */
+    public void settleExpiredBudgetPlans() {
+        AppDatabase.databaseWriteExecutor.execute(() -> {
+            LocalDate today = LocalDate.now();
+            List<BudgetPlan> plans = budgetPlanDao.getAllPlansSync();
+            List<Goal> goals = goalDao.getAllGoalsSync();
+            List<Goal> activeGoals = new ArrayList<>();
+            for (Goal goal : goals) if (!goal.isFinished) activeGoals.add(goal);
+            for (BudgetPlan plan : plans) {
+                LocalDate end = Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
+                if (plan.settled || end.isAfter(today)) continue;
+                double surplus = 0;
+                LocalDate start = Instant.ofEpochMilli(plan.startDate).atZone(ZoneId.systemDefault()).toLocalDate();
+                List<Transaction> transactions = transactionDao.getAllTransactionsSync();
+                for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
+                    surplus += BudgetCalculator.dailySurplus(plan, day, transactions);
+                }
+                Map<Integer, Double> allocation = BudgetCalculator.distributeEvenly(surplus, activeGoals);
+                for (Goal goal : activeGoals) {
+                    Double value = allocation.get(goal.id);
+                    if (value != null) { goal.savedAmount += value; goalDao.update(goal); }
+                }
+                plan.settled = true;
+                budgetPlanDao.update(plan);
+            }
+            com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
+        });
     }
 
     public void insertGoal(Goal goal) {

@@ -12,6 +12,7 @@ import com.example.budgetapp.database.RenewalItem;
 import com.example.budgetapp.database.Transaction;
 import com.example.budgetapp.util.AssistantConfig;
 import com.example.budgetapp.util.AutoAssetManager;
+import com.example.budgetapp.util.AutoCategoryRuleManager;
 import com.example.budgetapp.util.CategoryManager;
 import com.google.gson.Gson;
 import java.io.BufferedReader;
@@ -75,6 +76,8 @@ public class BackupManager {
             ruleStrings.add(rule.toString());
         }
         data.autoAssetRules = ruleStrings;
+        data.autoCategoryRules = AutoCategoryRuleManager.getRules(context);
+        data.defaultCategories = AutoCategoryRuleManager.getDefaults(context);
 
         AssistantConfig config = new AssistantConfig(context);
         BackupData.AssistantConfigData configData = new BackupData.AssistantConfigData();
@@ -1046,6 +1049,12 @@ public class BackupManager {
                                 AutoAssetManager.addRule(context, rule);
                             }
                         }
+                    }
+                    if (data.autoCategoryRules != null) {
+                        AutoCategoryRuleManager.saveRules(context, data.autoCategoryRules);
+                    }
+                    if (data.defaultCategories != null) {
+                        AutoCategoryRuleManager.saveDefaults(context, data.defaultCategories);
                     }
 
                     if (data.assistantConfig != null) {
@@ -2061,6 +2070,8 @@ public class BackupManager {
             ruleStrings.add(rule.toString());
         }
         data.autoAssetRules = ruleStrings;
+        data.autoCategoryRules = AutoCategoryRuleManager.getRules(context);
+        data.defaultCategories = AutoCategoryRuleManager.getDefaults(context);
 
         AssistantConfig config = new AssistantConfig(context);
         BackupData.AssistantConfigData configData = new BackupData.AssistantConfigData();
@@ -2204,6 +2215,12 @@ public class BackupManager {
                                 AutoAssetManager.addRule(context, rule);
                             }
                         }
+                    }
+                    if (data.autoCategoryRules != null) {
+                        AutoCategoryRuleManager.saveRules(context, data.autoCategoryRules);
+                    }
+                    if (data.defaultCategories != null) {
+                        AutoCategoryRuleManager.saveDefaults(context, data.defaultCategories);
                     }
 
                     if (data.assistantConfig != null) {

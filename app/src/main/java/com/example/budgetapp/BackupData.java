@@ -4,13 +4,15 @@ import com.example.budgetapp.database.AssetAccount;
 import com.example.budgetapp.database.Goal;
 import com.example.budgetapp.database.Transaction;
 import com.example.budgetapp.database.RenewalItem;
+import com.example.budgetapp.util.AutoCategoryRule;
+import com.example.budgetapp.util.AutoCategoryRuleManager;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class BackupData {
-    public int version = 5;
+    public int version = 6;
     public long createTime;
 
     public List<AssetAccount> assets;
@@ -21,6 +23,8 @@ public class BackupData {
 
     public AssistantConfigData assistantConfig;
     public List<String> autoAssetRules;
+    public List<AutoCategoryRule> autoCategoryRules;
+    public List<AutoCategoryRuleManager.DefaultCategory> defaultCategories;
     public List<RenewalItem> renewalList;
 
     // 【修复】记录数据类型，防止导入后 SharedPreferences 抛出 ClassCastException

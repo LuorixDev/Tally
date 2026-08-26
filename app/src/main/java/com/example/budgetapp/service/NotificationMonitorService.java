@@ -19,6 +19,8 @@ import com.example.budgetapp.util.NotificationRuleManager;
 import com.example.budgetapp.util.AppStatusNotifier;
 import com.example.budgetapp.util.AssistantConfig;
 import com.example.budgetapp.util.AutoAssetManager;
+import com.example.budgetapp.util.AutoCategoryRule;
+import com.example.budgetapp.util.AutoCategoryRuleManager;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -87,6 +89,20 @@ public class NotificationMonitorService extends NotificationListenerService {
             AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
             Transaction transaction = new Transaction(System.currentTimeMillis(), rule.type,
                     "通知记账", amount, sourceText);
+            AutoCategoryRule categoryRule = AutoCategoryRuleManager.findMatch(
+                    this, rule.packageName, sourceText, rule.type);
+            if (categoryRule != null) {
+                transaction.type = categoryRule.getTransactionType();
+                transaction.category = categoryRule.getCategory();
+                transaction.subCategory = categoryRule.getSubCategory();
+            } else {
+                AutoCategoryRuleManager.DefaultCategory fallback = AutoCategoryRuleManager.findDefault(
+                        this, rule.packageName, transaction.type);
+                if (fallback != null) {
+                    transaction.category = fallback.category;
+                    transaction.subCategory = fallback.subCategory;
+                }
+            }
             int assetId = rule.assetId;
             if (assetId <= 0) assetId = AutoAssetManager.getAppDefaultAsset(this, rule.packageName);
             if (assetId <= 0) assetId = new AssistantConfig(this).getDefaultAssetId();
@@ -97,8 +113,8 @@ public class NotificationMonitorService extends NotificationListenerService {
                 AssetAccount asset = db.assetAccountDao().getAssetByIdSync(transaction.assetId);
                 if (asset != null) {
                     assetName = asset.name;
-                    if (asset.type == 0) asset.amount += rule.type == 1 ? amount : -amount;
-                    else asset.amount += rule.type == 1 ? -amount : amount;
+                    if (asset.type == 0) asset.amount += transaction.type == 1 ? amount : -amount;
+                    else asset.amount += transaction.type == 1 ? -amount : amount;
                     db.assetAccountDao().update(asset);
                 }
             }
@@ -106,7 +122,7 @@ public class NotificationMonitorService extends NotificationListenerService {
                     .putLong("last_auto_accounting_trigger", System.currentTimeMillis()).apply();
             BackupManager.triggerAutoUploadIfEnabled(this);
             if (directPost && NotificationRuleManager.isDirectPostNotificationEnabled(this)) {
-                AppStatusNotifier.notifyDirectAccounting(this, rule.appName, rule.type, amount, assetName);
+                AppStatusNotifier.notifyDirectAccounting(this, rule.appName, transaction.type, amount, assetName);
             }
         });
     }

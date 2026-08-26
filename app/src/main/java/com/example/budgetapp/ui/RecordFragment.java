@@ -29,6 +29,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.NumberPicker;
+import android.widget.ProgressBar;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -56,10 +57,12 @@ import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.budgetapp.R;
 import com.example.budgetapp.database.AssetAccount;
+import com.example.budgetapp.database.BudgetPlan;
 import com.example.budgetapp.database.Transaction;
 import com.example.budgetapp.util.AssistantConfig;
 import com.example.budgetapp.util.CategoryManager;
 import com.example.budgetapp.viewmodel.FinanceViewModel;
+import com.example.budgetapp.util.BudgetCalculator;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -113,6 +116,8 @@ public class RecordFragment extends Fragment {
     private androidx.cardview.widget.CardView cardBudgetStatus;
     private TextView tvBudgetText;
     private android.widget.ProgressBar pbBudget;
+    private RecyclerView rvBudgetPlans;
+    private List<BudgetPlan> activeBudgetPlans = new ArrayList<>();
 
     // 账单滑动卡片相关
     private View layoutBillSlider;
@@ -320,6 +325,21 @@ public class RecordFragment extends Fragment {
         cardBudgetStatus = view.findViewById(R.id.card_budget_status);
         tvBudgetText = view.findViewById(R.id.tv_budget_text);
         pbBudget = view.findViewById(R.id.pb_budget);
+        rvBudgetPlans = view.findViewById(R.id.rv_budget_plans);
+        rvBudgetPlans.setLayoutManager(new LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false));
+        rvBudgetPlans.setAdapter(new RecordBudgetPlanAdapter());
+        viewModel.getAllBudgetPlans().observe(getViewLifecycleOwner(), plans -> {
+            activeBudgetPlans = new ArrayList<>();
+            LocalDate today = LocalDate.now();
+            if (plans != null) for (BudgetPlan p : plans) {
+                LocalDate s = Instant.ofEpochMilli(p.startDate).atZone(ZoneId.systemDefault()).toLocalDate();
+                LocalDate e = Instant.ofEpochMilli(p.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
+                if (p.enabled && !today.isBefore(s) && !today.isAfter(e)) activeBudgetPlans.add(p);
+            }
+            rvBudgetPlans.setVisibility(activeBudgetPlans.isEmpty() ? View.GONE : View.VISIBLE);
+            if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(activeBudgetPlans.isEmpty() ? View.GONE : View.VISIBLE);
+            rvBudgetPlans.getAdapter().notifyDataSetChanged();
+        });
 
         // 初始化账单滑动卡片
         cardBillSlider = view.findViewById(R.id.card_bill_slider);
@@ -487,6 +507,14 @@ public class RecordFragment extends Fragment {
     private void updateBudgetCard(List<Transaction> transactions) {
         if (transactions == null || getContext() == null) return;
 
+        if (!activeBudgetPlans.isEmpty()) {
+            if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(View.VISIBLE);
+            if (rvBudgetPlans != null) rvBudgetPlans.setVisibility(View.VISIBLE);
+            if (rvBudgetPlans != null && rvBudgetPlans.getAdapter() != null) rvBudgetPlans.getAdapter().notifyDataSetChanged();
+            updateTodayBudgetForActivePlans(transactions);
+            return;
+        }
+
         SharedPreferences prefs = requireContext().getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
         boolean isBudgetEnabled = prefs.getBoolean("is_budget_enabled", false);
 
@@ -545,6 +573,60 @@ public class RecordFragment extends Fragment {
 
         // 更新账单卡片（如果开启了账单卡片替换功能）
         updateBillSlider(transactions);
+    }
+
+    private void updateTodayBudgetForActivePlans(List<Transaction> transactions) {
+        LocalDate day = selectedDate != null ? selectedDate : LocalDate.now();
+        double totalDaily = 0;
+        LocalDate calculationDay = day.isAfter(LocalDate.now()) ? LocalDate.now() : day;
+        for (BudgetPlan plan : activeBudgetPlans) {
+            LocalDate end = Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
+            long spentEnd = calculationDay.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            double spentToDate = BudgetCalculator.expenseBetween(transactions, plan.startDate, spentEnd);
+            long remainingDays = end.toEpochDay() - calculationDay.toEpochDay() + 1;
+            if (remainingDays > 0) totalDaily += Math.max(0, plan.totalAmount - spentToDate) / remainingDays;
+        }
+        long ds = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long de = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        double totalSpent = BudgetCalculator.expenseBetween(transactions, ds, de);
+        tvBudgetText.setText(String.format("%.2f / %.2f", totalSpent, totalDaily));
+        try {
+            LinearLayout container = (LinearLayout) tvBudgetText.getParent();
+            ((TextView) container.getChildAt(0)).setText(day.format(DateTimeFormatter.ofPattern("M月d日预算")));
+        } catch (Exception ignored) {}
+        int progress = totalDaily > 0 ? (int) Math.min(100, totalSpent * 100 / totalDaily) : 0;
+        pbBudget.setProgress(progress);
+        pbBudget.setProgressTintList(ColorStateList.valueOf(ContextCompat.getColor(requireContext(),
+                totalSpent > totalDaily ? R.color.budget_progress_exceed : R.color.app_blue)));
+        tvBudgetText.setTextColor(ContextCompat.getColor(requireContext(),
+                totalSpent > totalDaily ? R.color.budget_progress_exceed : R.color.text_secondary));
+    }
+
+    private class RecordBudgetPlanAdapter extends RecyclerView.Adapter<RecordBudgetPlanAdapter.Holder> {
+        @NonNull @Override public Holder onCreateViewHolder(@NonNull ViewGroup p, int t) {
+            return new Holder(LayoutInflater.from(p.getContext()).inflate(R.layout.item_record_budget_plan, p, false));
+        }
+        @Override public void onBindViewHolder(@NonNull Holder h, int position) {
+            BudgetPlan plan = activeBudgetPlans.get(position);
+            LocalDate day = selectedDate != null ? selectedDate : LocalDate.now();
+            LocalDate calculationDay = day.isAfter(LocalDate.now()) ? LocalDate.now() : day;
+            List<Transaction> tx = viewModel.getAllTransactions().getValue();
+            long spentEnd = calculationDay.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            double spent = BudgetCalculator.expenseBetween(tx, plan.startDate, spentEnd);
+            h.name.setText(plan.name);
+            h.amount.setText(String.format("%.2f / %.2f", spent, plan.totalAmount));
+            h.progress.setProgress((int)Math.min(100, plan.totalAmount > 0 ? spent * 100 / plan.totalAmount : 0));
+            h.progress.setProgressTintList(ColorStateList.valueOf(ContextCompat.getColor(requireContext(),
+                    spent > plan.totalAmount ? R.color.budget_progress_exceed : R.color.app_blue)));
+            long days = java.time.Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() - calculationDay.toEpochDay() + 1;
+            double daily = days > 0 ? Math.max(0, plan.totalAmount - spent) / days : 0;
+            long dayStart = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            long dayEnd = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            double todaySpent = BudgetCalculator.expenseBetween(tx, dayStart, dayEnd);
+            h.daily.setText(String.format("%s %.2f / %.2f", day.format(DateTimeFormatter.ofPattern("M月d日预算")), todaySpent, daily));
+        }
+        @Override public int getItemCount() { return activeBudgetPlans.size(); }
+        class Holder extends RecyclerView.ViewHolder { TextView name, amount, daily; ProgressBar progress; Holder(View v) { super(v); name=v.findViewById(R.id.tv_record_plan_name); amount=v.findViewById(R.id.tv_record_plan_amount); daily=v.findViewById(R.id.tv_record_plan_daily); progress=v.findViewById(R.id.pb_record_plan); } }
     }
 
     /**

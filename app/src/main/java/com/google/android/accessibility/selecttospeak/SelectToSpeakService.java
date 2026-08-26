@@ -51,6 +51,8 @@ import com.example.budgetapp.ui.CategoryAdapter;
 import com.example.budgetapp.ui.PhotoActionActivity;
 import com.example.budgetapp.util.AssistantConfig;
 import com.example.budgetapp.util.AutoAssetManager;
+import com.example.budgetapp.util.AutoCategoryRule;
+import com.example.budgetapp.util.AutoCategoryRuleManager;
 import com.example.budgetapp.util.CategoryManager;
 import com.example.budgetapp.util.KeywordManager;
 import com.google.android.material.chip.Chip;
@@ -118,6 +120,7 @@ public class SelectToSpeakService extends AccessibilityService {
                 if (rootNode == null) return;
 
                 String packageName = rootNode.getPackageName() != null ? rootNode.getPackageName().toString() : "";
+                activePackageName = packageName;
 
 
                 // ======= 全局无差别节点树日志捕获 =======
@@ -260,6 +263,9 @@ public class SelectToSpeakService extends AccessibilityService {
             }
         }
     };
+
+    /** Package currently being scanned; used for app-scoped classification rules. */
+    private String activePackageName = "";
 
     // 新增：向界面输出Logcat同款节点树日志 (去除视觉噪音版)
     private void printNodeToManager(AccessibilityNodeInfo node, int depth, String packageName) {
@@ -569,6 +575,23 @@ public class SelectToSpeakService extends AccessibilityService {
         if (isWindowShowing) return;
         selectedSubCategory = null;
 
+        // Apply user-defined app/record-identifier rules before showing the confirmation UI.
+        AutoCategoryRule matchedRule = AutoCategoryRuleManager.findMatch(
+                this, activePackageName, note, type);
+        if (matchedRule != null) {
+            type = matchedRule.getTargetType();
+            category = matchedRule.getCategory();
+            selectedSubCategory = matchedRule.getSubCategory().isEmpty()
+                    ? null : matchedRule.getSubCategory();
+        } else {
+            com.example.budgetapp.util.AutoCategoryRuleManager.DefaultCategory fallback =
+                    AutoCategoryRuleManager.findDefault(this, activePackageName, type);
+            if (fallback != null) {
+                category = fallback.category;
+                selectedSubCategory = fallback.subCategory.isEmpty() ? null : fallback.subCategory;
+            }
+        }
+
         SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         boolean isCurrencyEnabled = prefs.getBoolean("enable_currency", false);
         boolean isPhotoBackupEnabled = prefs.getBoolean("enable_photo_backup", false);
@@ -576,7 +599,7 @@ public class SelectToSpeakService extends AccessibilityService {
         // 【修改点 A】：如果是后台直接记账（无悬浮窗权限），传入 transactionTime
         if (!Settings.canDrawOverlays(this)) {
             int finalAssetId = (matchedAssetId > 0) ? matchedAssetId : 0;
-            saveToDatabase(amount, type, category, null, note + " (后台)", "", finalAssetId, initialSymbol, "", transactionTime);
+            saveToDatabase(amount, type, category, selectedSubCategory, note + " (后台)", "", finalAssetId, initialSymbol, "", transactionTime);
             return;
         }
 

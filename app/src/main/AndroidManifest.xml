@@ -154,6 +154,14 @@
             android:theme="@style/Theme.BudgetApp"
             android:exported="false"/>
 
+        <activity
+            android:name=".ui.AutoCategoryRuleActivity"
+            android:label="自动分类配置"
+            android:exported="false"
+            android:theme="@style/Theme.BudgetApp" />
+
+        <activity android:name=".ui.DefaultCategoryActivity" android:label="应用默认分类" android:exported="false" android:theme="@style/Theme.BudgetApp" />
+
         <activity android:name=".ui.AssistantManagerActivity" />
 
         <activity
