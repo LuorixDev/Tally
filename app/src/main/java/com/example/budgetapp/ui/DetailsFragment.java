@@ -812,7 +812,9 @@ public class DetailsFragment extends Fragment {
             if (end.isAfter(last)) end = last;
             while (!day.isAfter(end)) {
                 Transaction display = new Transaction();
-                display.id = original.id; display.date = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                display.id = original.id;
+                display.date = day.equals(start) ? original.date
+                        : day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
                 display.type = original.type; display.category = original.category; display.amount = original.amount;
                 display.note = original.note; display.remark = original.remark; display.assetId = original.assetId;
                 display.currencySymbol = original.currencySymbol; display.photoPath = original.photoPath;
@@ -825,6 +827,7 @@ public class DetailsFragment extends Fragment {
                 day = day.plusDays(1);
             }
         }
+        expanded.sort((a, b) -> Long.compare(b.date, a.date));
         return expanded;
     }
 
