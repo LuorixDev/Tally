@@ -27,6 +27,7 @@ import java.util.Map;
 
 /** Converts user-configured notification patterns into transactions. */
 public class NotificationMonitorService extends NotificationListenerService {
+    private static final long SCREEN_DUPLICATE_WINDOW_MS = 10_000L;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Long> recentNotifications = new HashMap<>();
 
@@ -51,8 +52,14 @@ public class NotificationMonitorService extends NotificationListenerService {
 
         NotificationRuleManager.Match match = NotificationRuleManager.match(this, packageName, text);
         if (match == null) return;
-        long lastAutomaticTrigger = getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getLong("last_auto_accounting_trigger", 0L);
+        android.content.SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        long lastScreenTrigger = appPrefs.getLong("last_screen_accounting_trigger_" + packageName, 0L);
+        long screenAmountBits = appPrefs.getLong("last_screen_accounting_amount_" + packageName, 0L);
+        double screenAmount = Double.longBitsToDouble(screenAmountBits);
+        if (NotificationRuleManager.isRecentScreenDuplicate(now, lastScreenTrigger,
+                screenAmount, match.amount, SCREEN_DUPLICATE_WINDOW_MS)) return;
+        String throttleKey = "last_notification_trigger_" + packageName + "_" + match.rule.id;
+        long lastAutomaticTrigger = appPrefs.getLong(throttleKey, 0L);
         if (now - lastAutomaticTrigger < match.rule.delayMs) return;
 
         if (match.rule.directPost) {
@@ -86,6 +93,7 @@ public class NotificationMonitorService extends NotificationListenerService {
     private void postTransaction(NotificationRuleManager.Rule rule, double amount, String sourceText,
                                  boolean directPost) {
         AppDatabase.databaseWriteExecutor.execute(() -> {
+            String throttleKey = "last_notification_trigger_" + rule.packageName + "_" + rule.id;
             AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
             Transaction transaction = new Transaction(System.currentTimeMillis(), rule.type,
                     "通知记账", amount, sourceText);
@@ -107,20 +115,25 @@ public class NotificationMonitorService extends NotificationListenerService {
             if (assetId <= 0) assetId = AutoAssetManager.getAppDefaultAsset(this, rule.packageName);
             if (assetId <= 0) assetId = new AssistantConfig(this).getDefaultAssetId();
             transaction.assetId = assetId > 0 ? assetId : 0;
-            db.transactionDao().insert(transaction);
             String assetName = null;
-            if (transaction.assetId > 0) {
-                AssetAccount asset = db.assetAccountDao().getAssetByIdSync(transaction.assetId);
-                if (asset != null) {
-                    assetName = asset.name;
-                    if (asset.type == 0) asset.amount += transaction.type == 1 ? amount : -amount;
-                    else asset.amount += transaction.type == 1 ? -amount : amount;
-                    db.assetAccountDao().update(asset);
+            final String[] updatedAssetName = {null};
+            db.runInTransaction(() -> {
+                db.transactionDao().insert(transaction);
+                if (transaction.assetId > 0) {
+                    AssetAccount asset = db.assetAccountDao().getAssetByIdSync(transaction.assetId);
+                    if (asset != null) {
+                        updatedAssetName[0] = asset.name;
+                        if (asset.type == 0) asset.amount += transaction.type == 1 ? amount : -amount;
+                        else asset.amount += transaction.type == 1 ? -amount : amount;
+                        db.assetAccountDao().update(asset);
+                    }
                 }
-            }
+            });
+            assetName = updatedAssetName[0];
             getSharedPreferences("app_prefs", MODE_PRIVATE).edit()
-                    .putLong("last_auto_accounting_trigger", System.currentTimeMillis()).apply();
+                    .putLong(throttleKey, System.currentTimeMillis()).apply();
             BackupManager.triggerAutoUploadIfEnabled(this);
+            com.example.budgetapp.widget.WidgetUtils.updateAllWidgets(getApplicationContext());
             if (directPost && NotificationRuleManager.isDirectPostNotificationEnabled(this)) {
                 AppStatusNotifier.notifyDirectAccounting(this, rule.appName, transaction.type, amount, assetName);
             }

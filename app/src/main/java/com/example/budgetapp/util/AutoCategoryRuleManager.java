@@ -8,6 +8,7 @@ import com.example.budgetapp.BackupManager;
 import org.json.JSONArray;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /** Persists and applies rules for automatic-record classification. */
@@ -49,6 +50,15 @@ public final class AutoCategoryRuleManager {
     }
 
     public static void saveDefaults(Context context, List<DefaultCategory> defaults) {
+        saveDefaults(context, defaults, true);
+    }
+
+    public static void restoreDefaults(Context context, List<DefaultCategory> defaults) {
+        saveDefaults(context, defaults, false);
+    }
+
+    private static void saveDefaults(Context context, List<DefaultCategory> defaults,
+                                     boolean triggerBackup) {
         JSONArray array = new JSONArray();
         try {
             for (DefaultCategory item : defaults) {
@@ -62,7 +72,7 @@ public final class AutoCategoryRuleManager {
         } catch (Exception ignored) { return; }
         context.getSharedPreferences(DEFAULT_PREF_NAME, Context.MODE_PRIVATE)
                 .edit().putString(DEFAULT_KEY, array.toString()).apply();
-        BackupManager.triggerAutoUploadIfEnabled(context);
+        if (triggerBackup) BackupManager.triggerAutoUploadIfEnabled(context);
     }
 
     public static DefaultCategory findDefault(Context context, String packageName, int type) {
@@ -91,6 +101,15 @@ public final class AutoCategoryRuleManager {
     }
 
     public static void saveRules(Context context, List<AutoCategoryRule> rules) {
+        saveRules(context, rules, true);
+    }
+
+    public static void restoreRules(Context context, List<AutoCategoryRule> rules) {
+        saveRules(context, rules, false);
+    }
+
+    private static void saveRules(Context context, List<AutoCategoryRule> rules,
+                                  boolean triggerBackup) {
         JSONArray array = new JSONArray();
         try {
             for (AutoCategoryRule rule : rules) array.put(rule.toJson());
@@ -99,7 +118,7 @@ public final class AutoCategoryRuleManager {
         }
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 .edit().putString(KEY_RULES, array.toString()).apply();
-        BackupManager.triggerAutoUploadIfEnabled(context);
+        if (triggerBackup) BackupManager.triggerAutoUploadIfEnabled(context);
     }
 
     public static void addRule(Context context, AutoCategoryRule rule) {
@@ -147,7 +166,7 @@ public final class AutoCategoryRuleManager {
                 catch (RuntimeException ignored) { return false; }
             case AutoCategoryRule.MATCH_CONTAINS:
             default:
-                return note.toLowerCase().contains(expression.toLowerCase());
+                return note.toLowerCase(Locale.ROOT).contains(expression.toLowerCase(Locale.ROOT));
         }
     }
 

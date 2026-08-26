@@ -21,6 +21,14 @@ public final class NotificationRuleManager {
 
     private NotificationRuleManager() {}
 
+    public static boolean isRecentScreenDuplicate(long now, long screenTriggerTime,
+                                                   double screenAmount, double notificationAmount,
+                                                   long windowMs) {
+        return screenTriggerTime > 0 && now >= screenTriggerTime
+                && now - screenTriggerTime < windowMs
+                && Math.abs(screenAmount - notificationAmount) < 0.005;
+    }
+
     public static final class Rule {
         public String id;
         public String packageName;

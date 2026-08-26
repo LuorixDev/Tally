@@ -569,10 +569,15 @@ public class SelectToSpeakService extends AccessibilityService {
 
     // 2. 核心主方法（必须加上 long transactionTime）
     private void showConfirmWindow(double amount, int type, String category, String note, int matchedAssetId, String initialSymbol, long transactionTime) {
-        // Let notification accounting suppress the duplicate notification emitted immediately after this popup.
-        getSharedPreferences("app_prefs", MODE_PRIVATE).edit()
-                .putLong("last_auto_accounting_trigger", System.currentTimeMillis()).apply();
         if (isWindowShowing) return;
+        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        if (activePackageName != null && !activePackageName.isEmpty()) {
+            prefs.edit()
+                    .putLong("last_screen_accounting_trigger_" + activePackageName, System.currentTimeMillis())
+                    .putLong("last_screen_accounting_amount_" + activePackageName,
+                            Double.doubleToRawLongBits(amount))
+                    .apply();
+        }
         selectedSubCategory = null;
 
         // Apply user-defined app/record-identifier rules before showing the confirmation UI.
@@ -592,7 +597,6 @@ public class SelectToSpeakService extends AccessibilityService {
             }
         }
 
-        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         boolean isCurrencyEnabled = prefs.getBoolean("enable_currency", false);
         boolean isPhotoBackupEnabled = prefs.getBoolean("enable_photo_backup", false);
 

@@ -117,6 +117,7 @@ public class RecordFragment extends Fragment {
     private TextView tvBudgetText;
     private android.widget.ProgressBar pbBudget;
     private RecyclerView rvBudgetPlans;
+    private List<BudgetPlan> budgetPlans = new ArrayList<>();
     private List<BudgetPlan> activeBudgetPlans = new ArrayList<>();
 
     // 账单滑动卡片相关
@@ -329,16 +330,9 @@ public class RecordFragment extends Fragment {
         rvBudgetPlans.setLayoutManager(new LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false));
         rvBudgetPlans.setAdapter(new RecordBudgetPlanAdapter());
         viewModel.getAllBudgetPlans().observe(getViewLifecycleOwner(), plans -> {
-            activeBudgetPlans = new ArrayList<>();
-            LocalDate today = LocalDate.now();
-            if (plans != null) for (BudgetPlan p : plans) {
-                LocalDate s = Instant.ofEpochMilli(p.startDate).atZone(ZoneId.systemDefault()).toLocalDate();
-                LocalDate e = Instant.ofEpochMilli(p.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
-                if (p.enabled && !today.isBefore(s) && !today.isAfter(e)) activeBudgetPlans.add(p);
-            }
-            rvBudgetPlans.setVisibility(activeBudgetPlans.isEmpty() ? View.GONE : View.VISIBLE);
-            if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(activeBudgetPlans.isEmpty() ? View.GONE : View.VISIBLE);
-            rvBudgetPlans.getAdapter().notifyDataSetChanged();
+            budgetPlans = plans == null ? new ArrayList<>() : new ArrayList<>(plans);
+            List<Transaction> transactions = viewModel.getAllTransactions().getValue();
+            if (transactions != null) updateBudgetCard(transactions);
         });
 
         // 初始化账单滑动卡片
@@ -506,12 +500,22 @@ public class RecordFragment extends Fragment {
 
     private void updateBudgetCard(List<Transaction> transactions) {
         if (transactions == null || getContext() == null) return;
+        updateActiveBudgetPlansForSelectedDate();
 
         if (!activeBudgetPlans.isEmpty()) {
             if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(View.VISIBLE);
             if (rvBudgetPlans != null) rvBudgetPlans.setVisibility(View.VISIBLE);
             if (rvBudgetPlans != null && rvBudgetPlans.getAdapter() != null) rvBudgetPlans.getAdapter().notifyDataSetChanged();
             updateTodayBudgetForActivePlans(transactions);
+            return;
+        }
+
+        // Once range-based plans exist, the legacy monthly preference must not
+        // leak into dates that are outside every plan.
+        if (!budgetPlans.isEmpty()) {
+            if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(View.GONE);
+            adapter.setBudgetConfig(false, 0);
+            updateBillSlider(transactions);
             return;
         }
 
@@ -575,6 +579,21 @@ public class RecordFragment extends Fragment {
         updateBillSlider(transactions);
     }
 
+    private void updateActiveBudgetPlansForSelectedDate() {
+        LocalDate target = selectedDate != null ? selectedDate : LocalDate.now();
+        List<BudgetPlan> active = new ArrayList<>();
+        for (BudgetPlan plan : budgetPlans) {
+            LocalDate start = Instant.ofEpochMilli(plan.startDate).atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate end = Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
+            if (plan.enabled && !target.isBefore(start) && !target.isAfter(end)) active.add(plan);
+        }
+        activeBudgetPlans = active;
+        if (rvBudgetPlans != null) {
+            rvBudgetPlans.setVisibility(active.isEmpty() ? View.GONE : View.VISIBLE);
+            if (rvBudgetPlans.getAdapter() != null) rvBudgetPlans.getAdapter().notifyDataSetChanged();
+        }
+    }
+
     private void updateTodayBudgetForActivePlans(List<Transaction> transactions) {
         LocalDate day = selectedDate != null ? selectedDate : LocalDate.now();
         double totalDaily = 0;
@@ -615,7 +634,7 @@ public class RecordFragment extends Fragment {
             double spent = BudgetCalculator.expenseBetween(tx, plan.startDate, spentEnd);
             h.name.setText(plan.name);
             h.amount.setText(String.format("%.2f / %.2f", spent, plan.totalAmount));
-            h.progress.setProgress((int)Math.min(100, plan.totalAmount > 0 ? spent * 100 / plan.totalAmount : 0));
+            h.progress.setProgress(BudgetCalculator.progress(spent, plan.totalAmount));
             h.progress.setProgressTintList(ColorStateList.valueOf(ContextCompat.getColor(requireContext(),
                     spent > plan.totalAmount ? R.color.budget_progress_exceed : R.color.app_blue)));
             long days = java.time.Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() - calculationDay.toEpochDay() + 1;

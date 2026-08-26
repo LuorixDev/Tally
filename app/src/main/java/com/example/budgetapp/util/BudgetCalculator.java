@@ -13,7 +13,15 @@ import java.util.Map;
 
 /** Shared, deterministic budget calculations used by budget and record screens. */
 public final class BudgetCalculator {
+    public static final int PROGRESS_MAX = 10_000;
+
     private BudgetCalculator() {}
+
+    /** Keeps sub-percent spending visible without changing the represented ratio. */
+    public static int progress(double spent, double total) {
+        if (spent <= 0 || total <= 0) return 0;
+        return (int) Math.min(PROGRESS_MAX, Math.round(spent * PROGRESS_MAX / total));
+    }
 
     public static double expenseBetween(List<Transaction> transactions, long start, long end) {
         double total = 0;

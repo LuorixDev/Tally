@@ -8,7 +8,7 @@
 
     <RelativeLayout
         android:id="@+id/layout_top_bar"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/bar_background">
 
@@ -60,10 +60,11 @@
     <TextView
         android:id="@+id/tv_month_label"
         android:layout_width="wrap_content"
-        android:layout_height="120dp"
+        android:layout_height="wrap_content"
         android:layout_below="@id/layout_top_bar"
         android:background="@color/bar_background"
         android:paddingHorizontal="16dp"
+        android:paddingTop="8dp"
         android:paddingBottom="8dp"
         android:text="12月"
         android:textColor="@color/black"
@@ -290,7 +291,8 @@
     <androidx.cardview.widget.CardView
         android:id="@+id/card_budget_status"
         android:layout_width="0dp"
-        android:layout_height="88dp"
+        android:layout_height="wrap_content"
+        android:minHeight="88dp"
         android:layout_above="@id/card_stats"
         android:layout_marginBottom="8dp"
         android:layout_alignParentStart="true"
@@ -308,14 +310,13 @@
             android:orientation="vertical"
             android:gravity="center_vertical"
             android:paddingHorizontal="12dp"
-            android:paddingVertical="4dp">
+            android:paddingVertical="8dp">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rv_budget_plans"
                 android:layout_width="match_parent"
-                android:layout_height="38dp"
+                android:layout_height="52dp"
                 android:clipToPadding="false"
-                android:paddingHorizontal="2dp"
                 android:visibility="gone" />
 
             <LinearLayout

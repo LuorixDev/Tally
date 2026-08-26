@@ -14,6 +14,8 @@ public class BudgetPlan {
     public double totalAmount;
     public boolean enabled;
     public boolean settled;
+    /** Amount transferred to savings goals when this plan was settled. */
+    public double allocatedToGoals;
     public long createdAt;
 
     public BudgetPlan(String name, long startDate, long endDate, double totalAmount) {
@@ -23,6 +25,7 @@ public class BudgetPlan {
         this.totalAmount = totalAmount;
         this.enabled = true;
         this.settled = false;
+        this.allocatedToGoals = 0;
         this.createdAt = System.currentTimeMillis();
     }
 }

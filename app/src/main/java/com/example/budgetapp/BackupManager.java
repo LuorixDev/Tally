@@ -7,6 +7,8 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.example.budgetapp.database.AssetAccount;
+import com.example.budgetapp.database.AppDatabase;
+import com.example.budgetapp.database.BudgetPlan;
 import com.example.budgetapp.database.Goal;
 import com.example.budgetapp.database.RenewalItem;
 import com.example.budgetapp.database.Transaction;
@@ -53,6 +55,8 @@ public class BackupManager {
         Gson gson = new Gson();
         
         BackupData data = new BackupData(transactions, assets, goals);
+        data.budgetPlans = AppDatabase.getDatabase(context).budgetPlanDao().getAllPlansSync();
+        populateExtendedPreferences(context, data);
         
         List<String> expenseCats = CategoryManager.getExpenseCategories(context);
         List<String> incomeCats = CategoryManager.getIncomeCategories(context);
@@ -116,6 +120,38 @@ public class BackupManager {
             zos.closeEntry();
         }
 
+    }
+
+    private static void populateExtendedPreferences(Context context, BackupData data) {
+        SharedPreferences notificationPrefs = context.getSharedPreferences("notification_accounting_prefs", Context.MODE_PRIVATE);
+        Map<String, BackupData.PrefItem> values = new HashMap<>();
+        for (Map.Entry<String, ?> entry : notificationPrefs.getAll().entrySet()) {
+            if (entry.getValue() != null) {
+                values.put(entry.getKey(), new BackupData.PrefItem(entry.getValue().getClass().getSimpleName(), String.valueOf(entry.getValue())));
+            }
+        }
+        data.notificationPreferences = values;
+        data.appDefaultAssets = AutoAssetManager.getAppDefaultAssets(context);
+    }
+
+    private static void restoreExtendedPreferences(Context context, BackupData data) {
+        if (data.notificationPreferences != null) {
+            SharedPreferences.Editor editor = context.getSharedPreferences("notification_accounting_prefs", Context.MODE_PRIVATE).edit();
+            for (Map.Entry<String, BackupData.PrefItem> entry : data.notificationPreferences.entrySet()) {
+                BackupData.PrefItem item = entry.getValue();
+                if (item == null || item.value == null) continue;
+                if ("Boolean".equals(item.type)) editor.putBoolean(entry.getKey(), Boolean.parseBoolean(item.value));
+                else if ("Integer".equals(item.type)) editor.putInt(entry.getKey(), Integer.parseInt(item.value));
+                else if ("Long".equals(item.type)) editor.putLong(entry.getKey(), Long.parseLong(item.value));
+                else editor.putString(entry.getKey(), item.value);
+            }
+            editor.apply();
+        }
+        if (data.appDefaultAssets != null) {
+            for (Map.Entry<String, Integer> entry : data.appDefaultAssets.entrySet()) {
+                AutoAssetManager.setAppDefaultAsset(context, entry.getKey(), entry.getValue());
+            }
+        }
     }
 
 
@@ -1051,11 +1087,12 @@ public class BackupManager {
                         }
                     }
                     if (data.autoCategoryRules != null) {
-                        AutoCategoryRuleManager.saveRules(context, data.autoCategoryRules);
+                        AutoCategoryRuleManager.restoreRules(context, data.autoCategoryRules);
                     }
                     if (data.defaultCategories != null) {
-                        AutoCategoryRuleManager.saveDefaults(context, data.defaultCategories);
+                        AutoCategoryRuleManager.restoreDefaults(context, data.defaultCategories);
                     }
+                    restoreExtendedPreferences(context, data);
 
                     if (data.assistantConfig != null) {
                         restoreAssistantConfig(context, data.assistantConfig);
@@ -2047,6 +2084,8 @@ public class BackupManager {
         if (goals == null) goals = new ArrayList<>();
         Gson gson = new Gson();
         BackupData data = new BackupData(transactions, assets, goals);
+        data.budgetPlans = AppDatabase.getDatabase(context).budgetPlanDao().getAllPlansSync();
+        populateExtendedPreferences(context, data);
 
         List<String> expenseCats = CategoryManager.getExpenseCategories(context);
         List<String> incomeCats = CategoryManager.getIncomeCategories(context);
@@ -2217,11 +2256,12 @@ public class BackupManager {
                         }
                     }
                     if (data.autoCategoryRules != null) {
-                        AutoCategoryRuleManager.saveRules(context, data.autoCategoryRules);
+                        AutoCategoryRuleManager.restoreRules(context, data.autoCategoryRules);
                     }
                     if (data.defaultCategories != null) {
-                        AutoCategoryRuleManager.saveDefaults(context, data.defaultCategories);
+                        AutoCategoryRuleManager.restoreDefaults(context, data.defaultCategories);
                     }
+                    restoreExtendedPreferences(context, data);
 
                     if (data.assistantConfig != null) {
                         restoreAssistantConfig(context, data.assistantConfig);

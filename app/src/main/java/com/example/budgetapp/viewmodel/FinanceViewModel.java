@@ -33,7 +33,6 @@ import java.util.List;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -87,15 +86,21 @@ public class FinanceViewModel extends AndroidViewModel {
 
     private void migrateLegacyBudgetIfNeeded() {
         AppDatabase.databaseWriteExecutor.execute(() -> {
-            if (!budgetPlanDao.getAllPlansSync().isEmpty()) return;
-            SharedPreferences prefs = getApplication().getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
-            float amount = prefs.getFloat("monthly_budget", 0f);
-            if (amount <= 0) return;
-            LocalDate start = LocalDate.now().withDayOfMonth(1);
-            long legacyStart = prefs.getLong("budget_start_time", 0);
-            if (legacyStart > 0) start = java.time.Instant.ofEpochMilli(legacyStart).atZone(ZoneId.systemDefault()).toLocalDate();
-            LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
-            budgetPlanDao.insert(new BudgetPlan("旧版月度预算", start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(), end.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(), amount));
+            database.runInTransaction(() -> {
+                if (!budgetPlanDao.getAllPlansSync().isEmpty()) return;
+                SharedPreferences prefs = getApplication().getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
+                float amount = prefs.getFloat("monthly_budget", 0f);
+                if (amount <= 0) return;
+                LocalDate start = LocalDate.now().withDayOfMonth(1);
+                long legacyStart = prefs.getLong("budget_start_time", 0);
+                if (legacyStart > 0) {
+                    start = Instant.ofEpochMilli(legacyStart).atZone(ZoneId.systemDefault()).toLocalDate();
+                }
+                LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
+                budgetPlanDao.insert(new BudgetPlan("旧版月度预算",
+                        start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        end.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(), amount));
+            });
         });
     }
 
@@ -414,29 +419,40 @@ public class FinanceViewModel extends AndroidViewModel {
     /** Settles each expired plan once and evenly adds its non-negative daily surplus to goals. */
     public void settleExpiredBudgetPlans() {
         AppDatabase.databaseWriteExecutor.execute(() -> {
-            LocalDate today = LocalDate.now();
-            List<BudgetPlan> plans = budgetPlanDao.getAllPlansSync();
-            List<Goal> goals = goalDao.getAllGoalsSync();
-            List<Goal> activeGoals = new ArrayList<>();
-            for (Goal goal : goals) if (!goal.isFinished) activeGoals.add(goal);
-            for (BudgetPlan plan : plans) {
-                LocalDate end = Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
-                if (plan.settled || end.isAfter(today)) continue;
-                double surplus = 0;
-                LocalDate start = Instant.ofEpochMilli(plan.startDate).atZone(ZoneId.systemDefault()).toLocalDate();
+            boolean[] changed = {false};
+            database.runInTransaction(() -> {
+                LocalDate today = LocalDate.now();
+                List<BudgetPlan> plans = budgetPlanDao.getAllPlansSync();
+                List<Goal> goals = goalDao.getAllGoalsSync();
                 List<Transaction> transactions = transactionDao.getAllTransactionsSync();
-                for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
-                    surplus += BudgetCalculator.dailySurplus(plan, day, transactions);
+                for (BudgetPlan plan : plans) {
+                    LocalDate end = Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
+                    if (!plan.enabled || plan.settled || !end.isBefore(today)) continue;
+                    double surplus = BudgetCalculator.remainingAmount(plan, transactions);
+                    List<Goal> activeGoals = new ArrayList<>();
+                    for (Goal goal : goals) {
+                        LocalDate created = Instant.ofEpochMilli(goal.createdAt).atZone(ZoneId.systemDefault()).toLocalDate();
+                        LocalDate finished = goal.finishedDate > 0
+                                ? Instant.ofEpochMilli(goal.finishedDate).atZone(ZoneId.systemDefault()).toLocalDate() : null;
+                        if (!created.isAfter(end) && (!goal.isFinished || finished == null || !finished.isBefore(end))) {
+                            activeGoals.add(goal);
+                        }
+                    }
+                    Map<Integer, Double> allocation = BudgetCalculator.distributeEvenly(surplus, activeGoals);
+                    for (Goal goal : activeGoals) {
+                        Double value = allocation.get(goal.id);
+                        if (value != null) { goal.savedAmount += value; goalDao.update(goal); }
+                    }
+                    plan.allocatedToGoals = allocation.values().stream()
+                            .mapToDouble(Double::doubleValue).sum();
+                    plan.settled = true;
+                    budgetPlanDao.update(plan);
+                    changed[0] = true;
                 }
-                Map<Integer, Double> allocation = BudgetCalculator.distributeEvenly(surplus, activeGoals);
-                for (Goal goal : activeGoals) {
-                    Double value = allocation.get(goal.id);
-                    if (value != null) { goal.savedAmount += value; goalDao.update(goal); }
-                }
-                plan.settled = true;
-                budgetPlanDao.update(plan);
+            });
+            if (changed[0]) {
+                com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
             }
-            com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
         });
     }
 

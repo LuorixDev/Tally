@@ -2,6 +2,7 @@ package com.example.budgetapp;
 
 import com.example.budgetapp.database.AssetAccount;
 import com.example.budgetapp.database.Goal;
+import com.example.budgetapp.database.BudgetPlan;
 import com.example.budgetapp.database.Transaction;
 import com.example.budgetapp.database.RenewalItem;
 import com.example.budgetapp.util.AutoCategoryRule;
@@ -20,6 +21,7 @@ public class BackupData {
     public List<String> incomeCategories;
     public Map<String, List<String>> subCategoryMap;
     public List<Goal> goals; // 👈 新增这一行
+    public List<BudgetPlan> budgetPlans;
 
     public AssistantConfigData assistantConfig;
     public List<String> autoAssetRules;
@@ -29,6 +31,8 @@ public class BackupData {
 
     // 【修复】记录数据类型，防止导入后 SharedPreferences 抛出 ClassCastException
     public Map<String, PrefItem> appPreferences;
+    public Map<String, PrefItem> notificationPreferences;
+    public Map<String, Integer> appDefaultAssets;
 
     public List<Transaction> records;
 
