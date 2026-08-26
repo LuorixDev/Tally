@@ -141,9 +141,10 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
                 && t.spreadStartDate > 0 && t.spreadEndDate >= t.spreadStartDate) {
             LocalDate start = java.time.Instant.ofEpochMilli(t.spreadStartDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
             LocalDate end = java.time.Instant.ofEpochMilli(t.spreadEndDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
-            if (holder.tvAmortization != null) {
+            long spreadDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1;
+            if (holder.tvAmortization != null && spreadDays > 1) {
                 holder.tvAmortization.setVisibility(View.VISIBLE);
-                holder.tvAmortization.setText(String.format("%d天均摊 %.2f", java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1, t.amount));
+                holder.tvAmortization.setText(String.format("%d天均摊 %.2f", spreadDays, t.amount));
             }
         }
 

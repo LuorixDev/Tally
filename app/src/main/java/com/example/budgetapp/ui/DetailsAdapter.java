@@ -178,9 +178,12 @@ public class DetailsAdapter extends RecyclerView.Adapter<DetailsAdapter.ViewHold
                 && current.spreadEndDate >= current.spreadStartDate) {
             LocalDate start = Instant.ofEpochMilli(current.spreadStartDate).atZone(ZoneId.systemDefault()).toLocalDate();
             LocalDate end = Instant.ofEpochMilli(current.spreadEndDate).atZone(ZoneId.systemDefault()).toLocalDate();
-            holder.tvAmortization.setVisibility(View.VISIBLE);
-            holder.tvAmortization.setText(String.format(Locale.CHINA, "%d天均摊 %.2f",
-                    java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1, current.amount));
+            long spreadDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1;
+            if (spreadDays > 1) {
+                holder.tvAmortization.setVisibility(View.VISIBLE);
+                holder.tvAmortization.setText(String.format(Locale.CHINA, "%d天均摊 %.2f",
+                        spreadDays, current.amount));
+            }
         }
 
         String assetName = (current.assetId != 0 && assetMap != null) ? assetMap.get(current.assetId) != null ? assetMap.get(current.assetId).name : null : null;
