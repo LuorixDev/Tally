@@ -2,6 +2,7 @@ package com.example.budgetapp.ui;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -1955,8 +1956,8 @@ public class RecordFragment extends Fragment {
             tvSpreadEnd.setText("摊销结束 " + spreadFormat.format(spreadEnd.getTime()));
         };
         updateSpreadDisplay.run();
-        tvSpreadStart.setOnClickListener(v -> showTransactionDateTimePicker(spreadStart, updateSpreadDisplay, true));
-        tvSpreadEnd.setOnClickListener(v -> showTransactionDateTimePicker(spreadEnd, updateSpreadDisplay, true));
+        tvSpreadStart.setOnClickListener(v -> showSpreadDatePicker(spreadStart, updateSpreadDisplay));
+        tvSpreadEnd.setOnClickListener(v -> showSpreadDatePicker(spreadEnd, updateSpreadDisplay));
 
         // 点击日期可修改
         tvDate.setClickable(true);
@@ -2346,6 +2347,18 @@ public class RecordFragment extends Fragment {
      */
     private void showTransactionDateTimePicker(java.util.Calendar calendar, Runnable updateDisplay) {
         showTransactionDateTimePicker(calendar, updateDisplay, false);
+    }
+
+    private void showSpreadDatePicker(java.util.Calendar calendar, Runnable updateDisplay) {
+        if (getContext() == null) return;
+        DatePickerDialog picker = new DatePickerDialog(getContext(), (view, year, month, day) -> {
+            calendar.set(java.util.Calendar.YEAR, year);
+            calendar.set(java.util.Calendar.MONTH, month);
+            calendar.set(java.util.Calendar.DAY_OF_MONTH, day);
+            updateDisplay.run();
+        }, calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH),
+                calendar.get(java.util.Calendar.DAY_OF_MONTH));
+        picker.show();
     }
 
     private void showTransactionDateTimePicker(java.util.Calendar calendar, Runnable updateDisplay, boolean dateOnly) {
