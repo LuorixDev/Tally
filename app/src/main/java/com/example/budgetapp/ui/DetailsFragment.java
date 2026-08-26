@@ -76,6 +76,20 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 public class DetailsFragment extends Fragment {
 
+    private static long startOfDay(java.util.Calendar calendar) {
+        java.util.Calendar value = (java.util.Calendar) calendar.clone();
+        value.set(java.util.Calendar.HOUR_OF_DAY, 0); value.set(java.util.Calendar.MINUTE, 0);
+        value.set(java.util.Calendar.SECOND, 0); value.set(java.util.Calendar.MILLISECOND, 0);
+        return value.getTimeInMillis();
+    }
+
+    private static long endOfDay(java.util.Calendar calendar) {
+        java.util.Calendar value = (java.util.Calendar) calendar.clone();
+        value.set(java.util.Calendar.HOUR_OF_DAY, 23); value.set(java.util.Calendar.MINUTE, 59);
+        value.set(java.util.Calendar.SECOND, 59); value.set(java.util.Calendar.MILLISECOND, 999);
+        return value.getTimeInMillis();
+    }
+
     private FinanceViewModel viewModel;
     private RecyclerView recyclerView;
     private TextView tvStatisticsSummary;
@@ -885,6 +899,8 @@ public class DetailsFragment extends Fragment {
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
 
         TextView tvDate = dialogView.findViewById(R.id.tv_dialog_date);
+        TextView tvSpreadStart = dialogView.findViewById(R.id.tv_spread_start);
+        TextView tvSpreadEnd = dialogView.findViewById(R.id.tv_spread_end);
         RadioGroup rgType = dialogView.findViewById(R.id.rg_type);
         RecyclerView rvCategory = dialogView.findViewById(R.id.rv_category);
         EditText etAmount = dialogView.findViewById(R.id.et_amount);
@@ -1200,6 +1216,25 @@ public class DetailsFragment extends Fragment {
         };
         updateDateDisplay.run();
 
+        final java.util.Calendar spreadStart = java.util.Calendar.getInstance();
+        final java.util.Calendar spreadEnd = java.util.Calendar.getInstance();
+        if (existingTransaction != null && existingTransaction.spreadStartDate > 0
+                && existingTransaction.spreadEndDate >= existingTransaction.spreadStartDate) {
+            spreadStart.setTimeInMillis(existingTransaction.spreadStartDate);
+            spreadEnd.setTimeInMillis(existingTransaction.spreadEndDate);
+        } else {
+            spreadStart.setTimeInMillis(calendar.getTimeInMillis());
+            spreadEnd.setTimeInMillis(calendar.getTimeInMillis());
+        }
+        java.text.SimpleDateFormat spreadFormat = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.CHINA);
+        Runnable updateSpreadDisplay = () -> {
+            tvSpreadStart.setText("摊销开始 " + spreadFormat.format(spreadStart.getTime()));
+            tvSpreadEnd.setText("摊销结束 " + spreadFormat.format(spreadEnd.getTime()));
+        };
+        updateSpreadDisplay.run();
+        tvSpreadStart.setOnClickListener(v -> showTransactionDatePicker(spreadStart, updateSpreadDisplay));
+        tvSpreadEnd.setOnClickListener(v -> showTransactionDatePicker(spreadEnd, updateSpreadDisplay));
+
         // 点击日期可修改
         tvDate.setClickable(true);
         tvDate.setFocusable(true);
@@ -1332,6 +1367,12 @@ public class DetailsFragment extends Fragment {
                 }
 
                 String currencySymbol = isCurrencyEnabled ? btnCurrency.getText().toString() : "¥";
+                long spreadStartTs = startOfDay(spreadStart);
+                long spreadEndTs = endOfDay(spreadEnd);
+                if (spreadEndTs < spreadStartTs) {
+                    Toast.makeText(getContext(), "摊销结束日期不能早于开始日期", Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
                 if (existingTransaction != null) {
                     Transaction updateT = new Transaction(ts, type, category, amount, noteContent, userRemark);
@@ -1343,6 +1384,8 @@ public class DetailsFragment extends Fragment {
                     updateT.excludeFromBudget = isExcludedFromBudget[0];
                     updateT.spreadStartDate = existingTransaction.spreadStartDate;
                     updateT.spreadEndDate = existingTransaction.spreadEndDate;
+                    updateT.spreadStartDate = spreadStartTs;
+                    updateT.spreadEndDate = spreadEndTs;
 
                     viewModel.updateTransactionWithAssetSync(existingTransaction, updateT);
                 } else {
@@ -1353,6 +1396,8 @@ public class DetailsFragment extends Fragment {
                     newT.subCategory = selectedSubCategory[0];
                     newT.photoPath = currentPhotoPath[0];
                     newT.excludeFromBudget = isExcludedFromBudget[0];
+                    newT.spreadStartDate = spreadStartTs;
+                    newT.spreadEndDate = spreadEndTs;
 
                     viewModel.addTransactionWithAssetSync(newT);
                 }
