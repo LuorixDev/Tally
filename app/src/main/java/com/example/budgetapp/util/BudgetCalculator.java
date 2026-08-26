@@ -8,6 +8,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -42,9 +44,40 @@ public final class BudgetCalculator {
         if (day.isBefore(start) || day.isAfter(end)) return 0;
         long startMillis = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
         long endMillis = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        long days = end.toEpochDay() - start.toEpochDay() + 1;
-        double dailyBudget = days > 0 ? plan.totalAmount / days : 0;
+        double dailyBudget = dailyBudget(plan, day);
         return Math.max(0, dailyBudget - expenseBetween(transactions, startMillis, endMillis));
+    }
+
+    /**
+     * Returns the exact budget slice for a day in the plan period. Amounts are
+     * allocated in cents, so the slices add up to the plan total after normal
+     * currency rounding instead of accumulating floating-point division error.
+     */
+    public static double dailyBudget(BudgetPlan plan, LocalDate day) {
+        if (plan == null || day == null) return 0;
+        LocalDate start = toDate(plan.startDate);
+        LocalDate end = toDate(plan.endDate);
+        if (day.isBefore(start) || day.isAfter(end)) return 0;
+        long days = end.toEpochDay() - start.toEpochDay() + 1;
+        if (days <= 0) return 0;
+        long cents = Math.max(0, Math.round(plan.totalAmount * 100));
+        long each = cents / days;
+        long remainder = cents % days;
+        long index = day.toEpochDay() - start.toEpochDay();
+        return (each + (index < remainder ? 1 : 0)) / 100.0;
+    }
+
+    /** Splits a currency amount into equal cent-accurate parts. */
+    public static List<Double> distributeEvenly(double amount, int parts) {
+        if (parts <= 0 || amount <= 0) return Collections.emptyList();
+        long cents = Math.max(0, Math.round(amount * 100));
+        long each = cents / parts;
+        long remainder = cents % parts;
+        List<Double> result = new ArrayList<>(parts);
+        for (int i = 0; i < parts; i++) {
+            result.add((each + (i < remainder ? 1 : 0)) / 100.0);
+        }
+        return result;
     }
 
     public static double remainingAmount(BudgetPlan plan, List<Transaction> transactions) {
@@ -57,11 +90,9 @@ public final class BudgetCalculator {
     public static Map<Integer, Double> distributeEvenly(double amount, List<Goal> goals) {
         Map<Integer, Double> result = new LinkedHashMap<>();
         if (goals == null || goals.isEmpty() || amount <= 0) return result;
-        long cents = Math.max(0, Math.round(amount * 100));
-        long each = cents / goals.size();
-        long remainder = cents % goals.size();
+        List<Double> parts = distributeEvenly(amount, goals.size());
         for (int i = 0; i < goals.size(); i++) {
-            result.put(goals.get(i).id, (each + (i < remainder ? 1 : 0)) / 100.0);
+            result.put(goals.get(i).id, parts.get(i));
         }
         return result;
     }

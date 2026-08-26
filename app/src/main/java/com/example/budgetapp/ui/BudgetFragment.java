@@ -32,6 +32,7 @@ import com.example.budgetapp.database.Goal;
 import com.example.budgetapp.database.BudgetPlan;
 import com.example.budgetapp.database.Transaction;
 import com.example.budgetapp.util.CategoryManager;
+import com.example.budgetapp.util.BudgetCalculator;
 import com.example.budgetapp.viewmodel.FinanceViewModel;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
@@ -876,7 +877,9 @@ public class BudgetFragment extends Fragment {
             for (LocalDate d = start; d.isBefore(today); d = d.plusDays(1)) {
                 String key = "budget_" + d.getYear() + "_" + d.getMonthValue();
                 float monthBudget = prefs.getFloat(key, defaultBudget);
-                double dailyBudget = (monthBudget > 0) ? ((double) monthBudget / d.lengthOfMonth()) : 0;
+                double dailyBudget = monthBudget > 0
+                        ? BudgetCalculator.distributeEvenly(monthBudget, d.lengthOfMonth())
+                        .get(d.getDayOfMonth() - 1) : 0;
 
                 double expenseToday = 0;
                 long startOfDay = d.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();

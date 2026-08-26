@@ -11,6 +11,7 @@ import org.junit.Test;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 public class BudgetCalculatorTest {
@@ -46,6 +47,25 @@ public class BudgetCalculatorTest {
         assertEquals(3.34, result.get(1), 0.001);
         assertEquals(3.33, result.get(2), 0.001);
         assertEquals(3.33, result.get(3), 0.001);
+    }
+
+    @Test
+    public void distributeEvenlyByParts_preservesTotalWhenNotDivisible() {
+        List<Double> values = BudgetCalculator.distributeEvenly(10.01, 3);
+
+        assertEquals(Arrays.asList(3.34, 3.34, 3.33), values);
+        assertEquals(10.01, values.stream().mapToDouble(Double::doubleValue).sum(), 0.000001);
+    }
+
+    @Test
+    public void dailyBudget_allocatesWholePeriodInCents() {
+        LocalDate start = LocalDate.of(2026, 1, 1);
+        LocalDate end = LocalDate.of(2026, 1, 3);
+        BudgetPlan plan = new BudgetPlan("test", millis(start), millis(end), 10.01);
+
+        assertEquals(3.34, BudgetCalculator.dailyBudget(plan, start), 0.000001);
+        assertEquals(3.34, BudgetCalculator.dailyBudget(plan, start.plusDays(1)), 0.000001);
+        assertEquals(3.33, BudgetCalculator.dailyBudget(plan, end), 0.000001);
     }
 
     private static long millis(LocalDate date) {
