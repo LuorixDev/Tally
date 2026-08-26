@@ -2094,7 +2094,7 @@ public class DetailsFragment extends Fragment {
                     currentDetailSummaryTextView.setText(ssb);
                 }
             }
-            currentDetailAdapter.setTransactions(dayList);
+            if (currentDetailAdapter != null) currentDetailAdapter.setTransactions(dayList);
         });
     }
 

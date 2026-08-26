@@ -1955,8 +1955,8 @@ public class RecordFragment extends Fragment {
             tvSpreadEnd.setText("摊销结束 " + spreadFormat.format(spreadEnd.getTime()));
         };
         updateSpreadDisplay.run();
-        tvSpreadStart.setOnClickListener(v -> showTransactionDateTimePicker(spreadStart, updateSpreadDisplay));
-        tvSpreadEnd.setOnClickListener(v -> showTransactionDateTimePicker(spreadEnd, updateSpreadDisplay));
+        tvSpreadStart.setOnClickListener(v -> showTransactionDateTimePicker(spreadStart, updateSpreadDisplay, true));
+        tvSpreadEnd.setOnClickListener(v -> showTransactionDateTimePicker(spreadEnd, updateSpreadDisplay, true));
 
         // 点击日期可修改
         tvDate.setClickable(true);
@@ -2345,6 +2345,10 @@ public class RecordFragment extends Fragment {
      * 显示日期选择器，选择完日期后自动弹出时间选择器
      */
     private void showTransactionDateTimePicker(java.util.Calendar calendar, Runnable updateDisplay) {
+        showTransactionDateTimePicker(calendar, updateDisplay, false);
+    }
+
+    private void showTransactionDateTimePicker(java.util.Calendar calendar, Runnable updateDisplay, boolean dateOnly) {
         if (getContext() == null) return;
 
         final com.google.android.material.bottomsheet.BottomSheetDialog dialog = new com.google.android.material.bottomsheet.BottomSheetDialog(getContext());
@@ -2417,7 +2421,8 @@ public class RecordFragment extends Fragment {
             calendar.set(java.util.Calendar.MONTH, npMonth.getValue() - 1);
             calendar.set(java.util.Calendar.DAY_OF_MONTH, npDay.getValue());
             dialog.dismiss();
-            showTransactionTimePickerDialog(calendar, updateDisplay);
+            if (dateOnly) updateDisplay.run();
+            else showTransactionTimePickerDialog(calendar, updateDisplay);
         });
 
         dialog.show();
