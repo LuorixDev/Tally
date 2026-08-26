@@ -137,7 +137,8 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
             holder.tvNote.setTextColor(context.getColor(R.color.text_secondary));
         }
         if (holder.tvAmortization != null) holder.tvAmortization.setVisibility(View.GONE);
-        if (displayDate != null && t.spreadStartDate > 0 && t.spreadEndDate >= t.spreadStartDate) {
+        if ((displayDate != null || t.displayAmount != null)
+                && t.spreadStartDate > 0 && t.spreadEndDate >= t.spreadStartDate) {
             LocalDate start = java.time.Instant.ofEpochMilli(t.spreadStartDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
             LocalDate end = java.time.Instant.ofEpochMilli(t.spreadEndDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
             if (holder.tvAmortization != null) {
