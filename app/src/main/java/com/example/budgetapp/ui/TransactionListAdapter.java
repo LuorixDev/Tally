@@ -135,12 +135,14 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
             holder.tvNote.setVisibility(View.GONE);
             holder.tvNote.setTextColor(context.getColor(R.color.text_secondary));
         }
+        if (holder.tvAmortization != null) holder.tvAmortization.setVisibility(View.GONE);
         if (displayDate != null && t.spreadStartDate > 0 && t.spreadEndDate >= t.spreadStartDate) {
             LocalDate start = java.time.Instant.ofEpochMilli(t.spreadStartDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
             LocalDate end = java.time.Instant.ofEpochMilli(t.spreadEndDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
-            holder.tvNote.setVisibility(View.VISIBLE);
-            holder.tvNote.setText(String.format("%d天均摊 %.2f", java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1, t.amount));
-            holder.tvNote.setTextColor(Color.LTGRAY);
+            if (holder.tvAmortization != null) {
+                holder.tvAmortization.setVisibility(View.VISIBLE);
+                holder.tvAmortization.setText(String.format("%d天均摊 %.2f", java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1, t.amount));
+            }
         }
 
         // --- 右下角状态指示器 ---
@@ -186,6 +188,7 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
 
     static class ViewHolder extends RecyclerView.ViewHolder {
         TextView tvDate, tvAmount, tvNote;
+        TextView tvAmortization;
         View viewIndicator;
 
         TextView tvSubCategory;
@@ -197,6 +200,7 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
             super(v);
             tvDate = v.findViewById(R.id.tv_detail_date);
             tvSubCategory = v.findViewById(R.id.tv_detail_sub_category);
+            tvAmortization = v.findViewById(R.id.tv_amortization);
             tvAmount = v.findViewById(R.id.tv_detail_amount);
             tvNote = v.findViewById(R.id.tv_detail_note);
             viewIndicator = v.findViewById(R.id.view_remark_indicator);
