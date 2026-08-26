@@ -38,6 +38,8 @@ public class Transaction {
     // 【新增】是否不计入预算 (默认 false，即计入预算)
     @androidx.room.ColumnInfo(defaultValue = "0")
     public boolean excludeFromBudget;
+    @Ignore public Double displayAmount;
+    @Ignore public Transaction displaySource;
 
     public Transaction() {
     }

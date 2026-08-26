@@ -72,8 +72,9 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
                 .getBoolean("enable_currency", false);
 
         String symbol = (t.currencySymbol != null && !t.currencySymbol.isEmpty()) ? t.currencySymbol : "¥";
-        double shownAmount = displayDate == null ? t.amount
-                : com.example.budgetapp.util.BudgetCalculator.amountForDay(t, displayDate);
+        double shownAmount = t.displayAmount != null ? t.displayAmount
+                : (displayDate == null ? t.amount
+                : com.example.budgetapp.util.BudgetCalculator.amountForDay(t, displayDate));
         String amountStr = String.format("%.2f", shownAmount);
         String displayAmount = showCurrency ? (symbol + " " + amountStr) : amountStr;
 
@@ -177,7 +178,7 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
         }
 
         holder.itemView.setOnClickListener(v -> {
-            if (listener != null) listener.onItemClick(t);
+            if (listener != null) listener.onItemClick(t.displaySource != null ? t.displaySource : t);
         });
     }
 

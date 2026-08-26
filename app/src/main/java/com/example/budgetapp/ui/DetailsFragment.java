@@ -783,7 +783,7 @@ public class DetailsFragment extends Fragment {
         currentFilteredDataLive.observe(getViewLifecycleOwner(), list -> {
             if (list != null) {
                 // 🌟 修改点：将分页流替换为常规的 List 更新
-                adapter.setTransactions(list);
+                adapter.setTransactions(expandAmortizedTransactions(list, range[0], range[1]));
                 
                 // 更新统计信息
                 updateStatisticsSummary(list);
@@ -794,6 +794,38 @@ public class DetailsFragment extends Fragment {
                 recyclerView.startAnimation(anim);
             }
         });
+    }
+
+    private List<Transaction> expandAmortizedTransactions(List<Transaction> source, long rangeStart, long rangeEnd) {
+        List<Transaction> expanded = new ArrayList<>();
+        if (source == null) return expanded;
+        LocalDate first = java.time.Instant.ofEpochMilli(rangeStart).atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate last = java.time.Instant.ofEpochMilli(rangeEnd).atZone(ZoneId.systemDefault()).toLocalDate();
+        for (Transaction original : source) {
+            if (original.spreadStartDate <= 0 || original.spreadEndDate < original.spreadStartDate) {
+                expanded.add(original);
+                continue;
+            }
+            LocalDate start = java.time.Instant.ofEpochMilli(original.spreadStartDate).atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate end = java.time.Instant.ofEpochMilli(original.spreadEndDate).atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate day = start.isAfter(first) ? start : first;
+            if (end.isAfter(last)) end = last;
+            while (!day.isAfter(end)) {
+                Transaction display = new Transaction();
+                display.id = original.id; display.date = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                display.type = original.type; display.category = original.category; display.amount = original.amount;
+                display.note = original.note; display.remark = original.remark; display.assetId = original.assetId;
+                display.currencySymbol = original.currencySymbol; display.photoPath = original.photoPath;
+                display.subCategory = original.subCategory; display.targetObject = original.targetObject;
+                display.excludeFromBudget = original.excludeFromBudget;
+                display.spreadStartDate = original.spreadStartDate; display.spreadEndDate = original.spreadEndDate;
+                display.displayAmount = com.example.budgetapp.util.BudgetCalculator.amountForDay(original, day);
+                display.displaySource = original;
+                expanded.add(display);
+                day = day.plusDays(1);
+            }
+        }
+        return expanded;
     }
 
     private long[] getTimeRange() {
