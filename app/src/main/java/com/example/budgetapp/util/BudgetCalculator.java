@@ -56,6 +56,20 @@ public final class BudgetCalculator {
         return total;
     }
 
+    /** Amount of one transaction attributable to a single local calendar day. */
+    public static double amountForDay(Transaction t, LocalDate day) {
+        if (t == null || day == null) return 0;
+        if (t.spreadStartDate <= 0 || t.spreadEndDate < t.spreadStartDate) {
+            LocalDate txDay = toDate(t.date);
+            return txDay.equals(day) ? t.amount : 0;
+        }
+        LocalDate start = toDate(t.spreadStartDate);
+        LocalDate end = toDate(t.spreadEndDate);
+        if (day.isBefore(start) || day.isAfter(end)) return 0;
+        long index = day.toEpochDay() - start.toEpochDay();
+        return distributeEvenly(t.amount, (int) (end.toEpochDay() - start.toEpochDay() + 1)).get((int) index);
+    }
+
     public static double dailySurplus(BudgetPlan plan, LocalDate day, List<Transaction> transactions) {
         LocalDate start = toDate(plan.startDate);
         LocalDate end = toDate(plan.endDate);

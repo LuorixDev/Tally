@@ -2067,7 +2067,8 @@ public class DetailsFragment extends Fragment {
                 long start = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
                 long end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
                 dayList = allTransactions.stream()
-                        .filter(t -> t.date >= start && t.date < end)
+                        .filter(t -> t.date >= start && t.date < end
+                                || com.example.budgetapp.util.BudgetCalculator.amountForDay(t, date) > 0)
                         .collect(Collectors.toList());
             }
 
@@ -2106,7 +2107,7 @@ public class DetailsFragment extends Fragment {
                     if (t.type == 1) {
                         dayIncome += t.amount;
                     } else if (t.type == 0) {
-                        dayExpense += t.amount;
+                        dayExpense += com.example.budgetapp.util.BudgetCalculator.amountForDay(t, date);
                     }
                 }
 
@@ -2144,7 +2145,10 @@ public class DetailsFragment extends Fragment {
                     currentDetailSummaryTextView.setText(ssb);
                 }
             }
-            if (currentDetailAdapter != null) currentDetailAdapter.setTransactions(dayList);
+            if (currentDetailAdapter != null) {
+                currentDetailAdapter.setDisplayDate(date);
+                currentDetailAdapter.setTransactions(dayList);
+            }
         });
     }
 

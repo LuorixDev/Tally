@@ -1412,8 +1412,9 @@ public class RecordFragment extends Fragment {
         if (all != null) {
             long start = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
             long end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            dayList = all.stream()
-                    .filter(t -> t.date >= start && t.date < end)
+        dayList = all.stream()
+                    .filter(t -> t.date >= start && t.date < end
+                            || com.example.budgetapp.util.BudgetCalculator.amountForDay(t, date) > 0)
                     .collect(Collectors.toList());
         }
 
@@ -1452,7 +1453,7 @@ public class RecordFragment extends Fragment {
                 if (t.type == 1) {
                     dayIncome += t.amount;
                 } else if (t.type == 0) { // 🌟 严格限制 type == 0
-                    dayExpense += t.amount;
+                    dayExpense += com.example.budgetapp.util.BudgetCalculator.amountForDay(t, date);
                 }
             }
 
@@ -1490,6 +1491,7 @@ public class RecordFragment extends Fragment {
                 currentDetailSummaryTextView.setText(ssb);
             }
         }
+        currentDetailAdapter.setDisplayDate(date);
         currentDetailAdapter.setTransactions(dayList);
     }
 

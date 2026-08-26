@@ -24,6 +24,7 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
     private List<Transaction> list = new ArrayList<>();
     private Map<Integer, AssetAccount> assetMap = new HashMap<>();
     private OnItemClickListener listener;
+    private LocalDate displayDate;
 
     public interface OnItemClickListener {
         void onItemClick(Transaction transaction);
@@ -35,6 +36,11 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
 
     public void setTransactions(List<Transaction> list) {
         this.list = list;
+        notifyDataSetChanged();
+    }
+
+    public void setDisplayDate(LocalDate date) {
+        displayDate = date;
         notifyDataSetChanged();
     }
 
@@ -66,7 +72,9 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
                 .getBoolean("enable_currency", false);
 
         String symbol = (t.currencySymbol != null && !t.currencySymbol.isEmpty()) ? t.currencySymbol : "¥";
-        String amountStr = String.format("%.2f", t.amount);
+        double shownAmount = displayDate == null ? t.amount
+                : com.example.budgetapp.util.BudgetCalculator.amountForDay(t, displayDate);
+        String amountStr = String.format("%.2f", shownAmount);
         String displayAmount = showCurrency ? (symbol + " " + amountStr) : amountStr;
 
         // --- 核心逻辑：自动续费预览账单处理 ---
@@ -125,6 +133,14 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
             holder.tvNote.setText(t.note);
         } else {
             holder.tvNote.setVisibility(View.GONE);
+            holder.tvNote.setTextColor(context.getColor(R.color.text_secondary));
+        }
+        if (displayDate != null && t.spreadStartDate > 0 && t.spreadEndDate >= t.spreadStartDate) {
+            LocalDate start = java.time.Instant.ofEpochMilli(t.spreadStartDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            LocalDate end = java.time.Instant.ofEpochMilli(t.spreadEndDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            holder.tvNote.setVisibility(View.VISIBLE);
+            holder.tvNote.setText(String.format("%d天均摊 %.2f", java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1, t.amount));
+            holder.tvNote.setTextColor(Color.LTGRAY);
         }
 
         // --- 右下角状态指示器 ---
