@@ -81,6 +81,34 @@ public class BudgetCalculatorTest {
                 Arrays.asList(transaction), millis(purchase), millis(purchase.plusDays(3))), 0.000001);
     }
 
+    @Test
+    public void amountBetween_returnsOnlySlicesInsideRequestedRange() {
+        LocalDate purchase = LocalDate.of(2026, 1, 31);
+        Transaction transaction = new Transaction(millis(purchase) + 12 * 60 * 60 * 1000L,
+                0, "购物", 10.01);
+        transaction.spreadStartDate = millis(purchase);
+        transaction.spreadEndDate = millis(purchase.plusDays(2));
+
+        assertEquals(3.34, BudgetCalculator.amountBetween(transaction,
+                millis(purchase), millis(purchase.plusDays(1))), 0.000001);
+        assertEquals(6.67, BudgetCalculator.amountBetween(transaction,
+                millis(purchase.plusDays(1)), millis(purchase.plusDays(3))), 0.000001);
+        assertEquals(0, BudgetCalculator.amountBetween(transaction,
+                millis(purchase.plusDays(3)), millis(purchase.plusDays(4))), 0.000001);
+    }
+
+    @Test
+    public void amountBetween_keepsOriginalTimestampForOneDayBill() {
+        LocalDate day = LocalDate.of(2026, 2, 1);
+        Transaction transaction = new Transaction(millis(day) + 12 * 60 * 60 * 1000L,
+                0, "餐饮", 12);
+
+        assertEquals(0, BudgetCalculator.amountBetween(transaction,
+                millis(day), millis(day) + 12 * 60 * 60 * 1000L), 0.000001);
+        assertEquals(12, BudgetCalculator.amountBetween(transaction,
+                millis(day), millis(day.plusDays(1))), 0.000001);
+    }
+
     private static long millis(LocalDate date) {
         return date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }

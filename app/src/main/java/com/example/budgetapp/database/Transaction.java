@@ -16,7 +16,7 @@ public class Transaction {
     @PrimaryKey(autoGenerate = true)
     public int id;
     public long date;
-    /** Optional inclusive date range used only for budget amortization. */
+    /** Optional inclusive date range for displaying and calculating an amortized bill. */
     @androidx.room.ColumnInfo(defaultValue = "0")
     public long spreadStartDate;
     @androidx.room.ColumnInfo(defaultValue = "0")

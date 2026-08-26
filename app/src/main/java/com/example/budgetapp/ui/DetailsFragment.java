@@ -90,6 +90,12 @@ public class DetailsFragment extends Fragment {
         return value.getTimeInMillis();
     }
 
+    private static long nextDayStart(long millis) {
+        return java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+                .toLocalDate().plusDays(1).atStartOfDay(ZoneId.systemDefault())
+                .toInstant().toEpochMilli();
+    }
+
     private FinanceViewModel viewModel;
     private RecyclerView recyclerView;
     private TextView tvStatisticsSummary;
@@ -786,7 +792,7 @@ public class DetailsFragment extends Fragment {
                 adapter.setTransactions(expandAmortizedTransactions(list, range[0], range[1]));
                 
                 // 更新统计信息
-                updateStatisticsSummary(list);
+                updateStatisticsSummary(list, range[0], range[1]);
             }
 
             if (getContext() != null && recyclerView != null && direction != 0) {
@@ -800,7 +806,7 @@ public class DetailsFragment extends Fragment {
         List<Transaction> expanded = new ArrayList<>();
         if (source == null) return expanded;
         LocalDate first = java.time.Instant.ofEpochMilli(rangeStart).atZone(ZoneId.systemDefault()).toLocalDate();
-        LocalDate last = java.time.Instant.ofEpochMilli(rangeEnd).atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate last = java.time.Instant.ofEpochMilli(rangeEnd - 1).atZone(ZoneId.systemDefault()).toLocalDate();
         for (Transaction original : source) {
             if (original.spreadStartDate <= 0 || original.spreadEndDate < original.spreadStartDate) {
                 expanded.add(original);
@@ -834,7 +840,7 @@ public class DetailsFragment extends Fragment {
     private long[] getTimeRange() {
         // 如果筛选器中设置了自定义时间范围，优先使用
         if (currentFilter.startTime != null && currentFilter.endTime != null) {
-            return new long[]{currentFilter.startTime, currentFilter.endTime + 86400000L - 1}; // 结束时间加一天减1毫秒（到23:59:59.999）
+            return new long[]{currentFilter.startTime, nextDayStart(currentFilter.endTime)};
         }
         if (currentFilter.startTime != null) {
             // 只设置了起始时间，结束时间使用当前时间
@@ -842,7 +848,7 @@ public class DetailsFragment extends Fragment {
         }
         if (currentFilter.endTime != null) {
             // 只设置了结束时间，起始时间使用2000年1月1日
-            return new long[]{946656000000L, currentFilter.endTime + 86400000L - 1}; // 2000-01-01 00:00:00
+            return new long[]{946656000000L, nextDayStart(currentFilter.endTime)}; // 2000-01-01 00:00:00
         }
         
         // 如果有其他筛选条件（类型、金额、分类、资产），则默认显示全部时间范围
@@ -859,15 +865,15 @@ public class DetailsFragment extends Fragment {
         
         // 没有任何筛选条件，使用原有的年/月/周逻辑
         ZoneId zone = ZoneId.systemDefault();
-        if (currentMode == 0) return new long[]{selectedDate.with(TemporalAdjusters.firstDayOfYear()).atStartOfDay(zone).toInstant().toEpochMilli(), selectedDate.with(TemporalAdjusters.lastDayOfYear()).atTime(23,59,59).atZone(zone).toInstant().toEpochMilli()};
-        if (currentMode == 2) return new long[]{selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(zone).toInstant().toEpochMilli(), selectedDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).atTime(23,59,59).atZone(zone).toInstant().toEpochMilli()};
-        return new long[]{selectedDate.with(TemporalAdjusters.firstDayOfMonth()).atStartOfDay(zone).toInstant().toEpochMilli(), selectedDate.with(TemporalAdjusters.lastDayOfMonth()).atTime(23,59,59).atZone(zone).toInstant().toEpochMilli()};
+        if (currentMode == 0) return new long[]{selectedDate.with(TemporalAdjusters.firstDayOfYear()).atStartOfDay(zone).toInstant().toEpochMilli(), selectedDate.with(TemporalAdjusters.lastDayOfYear()).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()};
+        if (currentMode == 2) return new long[]{selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(zone).toInstant().toEpochMilli(), selectedDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()};
+        return new long[]{selectedDate.with(TemporalAdjusters.firstDayOfMonth()).atStartOfDay(zone).toInstant().toEpochMilli(), selectedDate.with(TemporalAdjusters.lastDayOfMonth()).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()};
     }
 
     /**
      * 更新统计信息摘要
      */
-    private void updateStatisticsSummary(List<Transaction> transactions) {
+    private void updateStatisticsSummary(List<Transaction> transactions, long rangeStart, long rangeEnd) {
         if (tvStatisticsSummary == null || transactions == null) {
             return;
         }
@@ -883,11 +889,12 @@ public class DetailsFragment extends Fragment {
             }
             
             count++; // 只计算非转账账单
-            
+            double amountInRange = com.example.budgetapp.util.BudgetCalculator.amountBetween(
+                    t, rangeStart, rangeEnd);
             if (t.type == 0) { // 支出
-                totalExpense += t.amount;
+                totalExpense += amountInRange;
             } else if (t.type == 1) { // 收入
-                totalIncome += t.amount;
+                totalIncome += amountInRange;
             }
         }
 
@@ -1422,8 +1429,6 @@ public class DetailsFragment extends Fragment {
                     updateT.subCategory = selectedSubCategory[0];
                     updateT.photoPath = currentPhotoPath[0];
                     updateT.excludeFromBudget = isExcludedFromBudget[0];
-                    updateT.spreadStartDate = existingTransaction.spreadStartDate;
-                    updateT.spreadEndDate = existingTransaction.spreadEndDate;
                     updateT.spreadStartDate = spreadStartTs;
                     updateT.spreadEndDate = spreadEndTs;
 

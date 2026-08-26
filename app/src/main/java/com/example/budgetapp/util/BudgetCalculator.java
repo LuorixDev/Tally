@@ -30,29 +30,36 @@ public final class BudgetCalculator {
         double total = 0;
         if (transactions == null) return total;
         for (Transaction t : transactions) {
-            if (t.type == 0 && !t.excludeFromBudget && t.type != 2
-                    && !"资产互转".equals(t.category)) {
-                LocalDate spreadStart = toDate(t.spreadStartDate);
-                LocalDate spreadEnd = toDate(t.spreadEndDate);
-                if (t.spreadStartDate > 0 && t.spreadEndDate >= t.spreadStartDate
-                        && !spreadEnd.isBefore(spreadStart)) {
-                    LocalDate queryStart = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate();
-                    LocalDate queryEnd = Instant.ofEpochMilli(Math.max(start, end - 1))
-                            .atZone(ZoneId.systemDefault()).toLocalDate();
-                    long days = ChronoUnit.DAYS.between(spreadStart, spreadEnd) + 1;
-                    LocalDate overlapStart = spreadStart.isAfter(queryStart) ? spreadStart : queryStart;
-                    LocalDate overlapEnd = spreadEnd.isBefore(queryEnd) ? spreadEnd : queryEnd;
-                    if (!overlapEnd.isBefore(overlapStart)) {
-                        long first = ChronoUnit.DAYS.between(spreadStart, overlapStart);
-                        long count = ChronoUnit.DAYS.between(overlapStart, overlapEnd) + 1;
-                        List<Double> slices = distributeEvenly(t.amount, (int) days);
-                        for (long i = 0; i < count; i++) total += slices.get((int) (first + i));
-                    }
-                } else {
-                    if (t.date >= start && t.date < end) total += t.amount;
-                }
+            if (t.type == 0 && !t.excludeFromBudget && !"资产互转".equals(t.category)) {
+                total += amountBetween(t, start, end);
             }
         }
+        return total;
+    }
+
+    /** Amount of one transaction attributable to the half-open range [start, end). */
+    public static double amountBetween(Transaction t, long start, long end) {
+        if (t == null || end <= start) return 0;
+        if (t.spreadStartDate <= 0 || t.spreadEndDate < t.spreadStartDate) {
+            return t.date >= start && t.date < end ? t.amount : 0;
+        }
+
+        LocalDate spreadStart = toDate(t.spreadStartDate);
+        LocalDate spreadEnd = toDate(t.spreadEndDate);
+        if (spreadEnd.isBefore(spreadStart)) return 0;
+
+        LocalDate queryStart = toDate(start);
+        LocalDate queryEnd = toDate(end - 1);
+        LocalDate overlapStart = spreadStart.isAfter(queryStart) ? spreadStart : queryStart;
+        LocalDate overlapEnd = spreadEnd.isBefore(queryEnd) ? spreadEnd : queryEnd;
+        if (overlapEnd.isBefore(overlapStart)) return 0;
+
+        long days = ChronoUnit.DAYS.between(spreadStart, spreadEnd) + 1;
+        long first = ChronoUnit.DAYS.between(spreadStart, overlapStart);
+        long count = ChronoUnit.DAYS.between(overlapStart, overlapEnd) + 1;
+        List<Double> slices = distributeEvenly(t.amount, (int) days);
+        double total = 0;
+        for (long i = 0; i < count; i++) total += slices.get((int) (first + i));
         return total;
     }
 
