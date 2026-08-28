@@ -2285,24 +2285,39 @@ public class SelectToSpeakService extends AccessibilityService {
                 isPaySuccess = true;
             }
 
-            // 2. 提取金额（在“支付成功”后出现的纯数字或带小数的数字，如 "4.83"）
+            // 2. 提取金额。支付宝新页面会把金额作为“￥19.00”节点提供，
+            //    不能只匹配纯数字，否则成功页不会触发记账弹窗。
             if (isPaySuccess && amount == -1) {
-                // 正则匹配：纯数字，可带1到2位小数
-                if (content.matches("^\\d+(\\.\\d{1,2})?$")) {
+                if (content.matches("^[￥¥]?\\s*\\d+(\\.\\d{1,2})?$")) {
                     try {
-                        amount = Double.parseDouble(content);
+                        amount = Double.parseDouble(content.replace("￥", "")
+                                .replace("¥", "").trim());
 
-                        // 【核心修复】：没有“收款方”标签时，商户名紧跟在纯数字金额的后面
-                        for (int j = i + 1; j < allNodes.size(); j++) {
+                        // 新版支付宝节点顺序通常是“商户名 -> 金额”，优先向前找商户。
+                        for (int j = i - 1; j >= 0; j--) {
+                            AccessibilityNodeInfo previousNode = allNodes.get(j);
+                            String previousText = previousNode.getText() != null ? previousNode.getText().toString().trim() : "";
+                            String previousDesc = previousNode.getContentDescription() != null ? previousNode.getContentDescription().toString().trim() : "";
+                            String previousContent = !previousText.isEmpty() ? previousText : previousDesc;
+                            if (!previousContent.isEmpty() && !isAlipayPaySuccessControlLabel(previousContent)
+                                    && !previousContent.matches("^[￥¥]?\\s*\\d+(\\.\\d{1,2})?$")
+                                    && !previousContent.startsWith("-")) {
+                                payeeName = previousContent;
+                                break;
+                            }
+                        }
+                        // 兼容旧版“金额 -> 商户名”的节点顺序。
+                        if (payeeName.isEmpty()) for (int j = i + 1; j < allNodes.size(); j++) {
                             AccessibilityNodeInfo nextNode = allNodes.get(j);
                             String nextText = nextNode.getText() != null ? nextNode.getText().toString().trim() : "";
                             String nextDesc = nextNode.getContentDescription() != null ? nextNode.getContentDescription().toString().trim() : "";
                             String nextContent = !nextText.isEmpty() ? nextText : nextDesc;
 
-                            // 排除空节点、以及带有 ￥、¥ 或 - 符号的优惠券金额干扰项
-                            if (!nextContent.isEmpty() && !nextContent.contains("￥") && !nextContent.contains("¥") && !nextContent.startsWith("-")) {
+                            if (!nextContent.isEmpty() && !isAlipayPaySuccessControlLabel(nextContent)
+                                    && !nextContent.matches("^[￥¥]?\\s*\\d+(\\.\\d{1,2})?$")
+                                    && !nextContent.startsWith("-")) {
                                 payeeName = nextContent;
-                                break; // 抓到商户名立刻跳出
+                                break;
                             }
                         }
                     } catch (Exception e) {
@@ -2380,6 +2395,11 @@ public class SelectToSpeakService extends AccessibilityService {
         }
 
         return false;
+    }
+
+    private boolean isAlipayPaySuccessControlLabel(String value) {
+        return "支付成功".equals(value) || "回首页".equals(value) || "完成".equals(value)
+                || "使用说明".equals(value) || "安全支付中".equals(value);
     }
     /**
      * 【专版专杀】专门适配拼多多“多多钱包”支付密码弹窗页面
