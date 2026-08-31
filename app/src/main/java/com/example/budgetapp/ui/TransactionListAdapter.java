@@ -165,7 +165,11 @@ public class TransactionListAdapter extends RecyclerView.Adapter<TransactionList
             holder.viewIndicator.setVisibility(View.GONE);
             holder.llAssetInfo.setVisibility(View.VISIBLE);
             holder.tvAssetName.setText(assetName);
-            holder.tvAssetName.setTextColor(statusColor);
+            // 资产名称颜色表达交易类型；备注/照片状态只用于右侧指示点。
+            holder.tvAssetName.setTextColor(t.type == 1
+                    ? context.getColor(R.color.income_red)
+                    : t.type == 2 ? context.getColor(R.color.app_blue)
+                    : context.getColor(R.color.expense_green));
             
             // 显示资产图标
             if (AssetIconHelper.bindSvgIcon(holder.ivAssetIcon, assetAccount.svgIcon)) {

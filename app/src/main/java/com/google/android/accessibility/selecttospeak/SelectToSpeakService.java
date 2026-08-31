@@ -2286,10 +2286,12 @@ public class SelectToSpeakService extends AccessibilityService {
             // 2. 提取金额。支付宝新页面会把金额作为“￥19.00”节点提供，
             //    不能只匹配纯数字，否则成功页不会触发记账弹窗。
             if (isPaySuccess && amount == -1) {
-                if (content.matches("^[￥¥]?\\s*\\d+(\\.\\d{1,2})?$")) {
+                // 支付宝不同版本可能在货币符号后插入普通空格、全角空格或换行。
+                Matcher amountMatcher = Pattern.compile("^[￥¥\\s]*([0-9]+(?:\\.[0-9]{1,2})?)[\\s]*$")
+                        .matcher(content);
+                if (amountMatcher.matches()) {
                     try {
-                        amount = Double.parseDouble(content.replace("￥", "")
-                                .replace("¥", "").trim());
+                        amount = Double.parseDouble(amountMatcher.group(1));
 
                         // 新版支付宝节点顺序通常是“商户名 -> 金额”，优先向前找商户。
                         for (int j = i - 1; j >= 0; j--) {

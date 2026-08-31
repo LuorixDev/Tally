@@ -195,7 +195,11 @@ public class DetailsAdapter extends RecyclerView.Adapter<DetailsAdapter.ViewHold
             holder.viewIndicator.setVisibility(View.GONE);
             holder.llAssetInfo.setVisibility(View.VISIBLE);
             holder.tvAssetName.setText(assetName);
-            holder.tvAssetName.setTextColor(statusColor);
+            // 资产名称颜色表达交易类型，不应因自动记账没有备注而变成红色。
+            holder.tvAssetName.setTextColor(current.type == 1
+                    ? context.getColor(R.color.income_red)
+                    : current.type == 2 ? context.getColor(R.color.app_blue)
+                    : context.getColor(R.color.expense_green));
             
             // 显示资产图标
             if (AssetIconHelper.bindSvgIcon(holder.ivAssetIcon, assetAccount.svgIcon)) {

@@ -626,7 +626,14 @@ public class RecordFragment extends Fragment {
         }
         long ds = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
         long de = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        double totalSpent = BudgetCalculator.expenseBetween(transactions, ds, de);
+        double totalSpent = 0;
+        for (BudgetPlan plan : activeBudgetPlans) {
+            long planStart = Math.max(ds, plan.startDate);
+            long planEnd = Math.min(de, Instant.ofEpochMilli(plan.endDate)
+                    .atZone(ZoneId.systemDefault()).toLocalDate().plusDays(1)
+                    .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
+            if (planEnd > planStart) totalSpent += BudgetCalculator.expenseBetween(transactions, planStart, planEnd);
+        }
         tvBudgetText.setText(String.format("%.2f / %.2f", totalSpent, totalDaily));
         try {
             LinearLayout container = (LinearLayout) tvBudgetText.getParent();
