@@ -600,19 +600,13 @@ public class SelectToSpeakService extends AccessibilityService {
         boolean isCurrencyEnabled = prefs.getBoolean("enable_currency", false);
         boolean isPhotoBackupEnabled = prefs.getBoolean("enable_photo_backup", false);
 
-        // 【修改点 A】：如果是后台直接记账（无悬浮窗权限），传入 transactionTime
-        if (!Settings.canDrawOverlays(this)) {
-            int finalAssetId = (matchedAssetId > 0) ? matchedAssetId : 0;
-            saveToDatabase(amount, type, category, selectedSubCategory, note + " (后台)", "", finalAssetId, initialSymbol, "", transactionTime);
-            return;
-        }
-
         try {
             WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
             WindowManager.LayoutParams params = new WindowManager.LayoutParams();
 
-            params.type = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ?
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE;
+            // AccessibilityService 自身可使用 ACCESSIBILITY_OVERLAY，不依赖额外的悬浮窗权限。
+            // 之前使用 APPLICATION_OVERLAY 时，权限未授予会静默走后台记账分支，用户看不到确认窗口。
+            params.type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
             params.format = PixelFormat.TRANSLUCENT;
             params.width = WindowManager.LayoutParams.MATCH_PARENT;
             params.height = WindowManager.LayoutParams.MATCH_PARENT;
@@ -894,6 +888,10 @@ public class SelectToSpeakService extends AccessibilityService {
         } catch (Exception e) {
             Log.e("AutoTrackService", "Window show failed", e);
             isWindowShowing = false;
+            // 窗口服务异常时仍保留记账结果，避免支付已成功但账单丢失。
+            int finalAssetId = (matchedAssetId > 0) ? matchedAssetId : 0;
+            saveToDatabase(amount, type, category, selectedSubCategory, note + " (后台)", "",
+                    finalAssetId, initialSymbol, "", transactionTime);
         }
     }
     private void closeWindow(WindowManager wm, View view) {

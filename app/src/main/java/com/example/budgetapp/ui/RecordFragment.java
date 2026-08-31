@@ -660,7 +660,13 @@ public class RecordFragment extends Fragment {
             double daily = days > 0 ? Math.max(0, plan.totalAmount - spent) / days : 0;
             long dayStart = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
             long dayEnd = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            double todaySpent = BudgetCalculator.expenseBetween(tx, dayStart, dayEnd);
+            // 每个计划只统计其自身时间范围内的当日支出，避免多个计划互相串账。
+            long planStart = Math.max(dayStart, plan.startDate);
+            long planEnd = Math.min(dayEnd, Instant.ofEpochMilli(plan.endDate)
+                    .atZone(ZoneId.systemDefault()).toLocalDate().plusDays(1)
+                    .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
+            double todaySpent = planEnd > planStart
+                    ? BudgetCalculator.expenseBetween(tx, planStart, planEnd) : 0;
             h.daily.setText(String.format("%s %.2f / %.2f", day.format(DateTimeFormatter.ofPattern("M月d日预算")), todaySpent, daily));
         }
         @Override public int getItemCount() { return activeBudgetPlans.size(); }
