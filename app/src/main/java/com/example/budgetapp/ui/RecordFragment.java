@@ -615,12 +615,16 @@ public class RecordFragment extends Fragment {
 
     private void updateTodayBudgetForActivePlans(List<Transaction> transactions) {
         LocalDate day = selectedDate != null ? selectedDate : LocalDate.now();
+        // 日历查询只覆盖当前月份，计划可能从上个月开始；预算累计必须使用全量交易，
+        // 否则总卡片会漏算计划开始日至本月首日之间的支出。
+        List<Transaction> budgetTransactions = viewModel.getAllTransactions().getValue();
+        if (budgetTransactions == null) budgetTransactions = transactions;
         double totalDaily = 0;
         LocalDate calculationDay = day.isAfter(LocalDate.now()) ? LocalDate.now() : day;
         for (BudgetPlan plan : activeBudgetPlans) {
             LocalDate end = Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
             long spentEnd = calculationDay.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            double spentToDate = BudgetCalculator.expenseBetween(transactions, plan.startDate, spentEnd);
+            double spentToDate = BudgetCalculator.expenseBetween(budgetTransactions, plan.startDate, spentEnd);
             long remainingDays = end.toEpochDay() - calculationDay.toEpochDay() + 1;
             if (remainingDays > 0) totalDaily += Math.max(0, plan.totalAmount - spentToDate) / remainingDays;
         }
@@ -632,7 +636,7 @@ public class RecordFragment extends Fragment {
             long planEnd = Math.min(de, Instant.ofEpochMilli(plan.endDate)
                     .atZone(ZoneId.systemDefault()).toLocalDate().plusDays(1)
                     .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
-            if (planEnd > planStart) totalSpent += BudgetCalculator.expenseBetween(transactions, planStart, planEnd);
+            if (planEnd > planStart) totalSpent += BudgetCalculator.expenseBetween(budgetTransactions, planStart, planEnd);
         }
         tvBudgetText.setText(String.format("%.2f / %.2f", totalSpent, totalDaily));
         try {
