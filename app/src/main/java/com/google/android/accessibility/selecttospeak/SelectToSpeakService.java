@@ -1123,8 +1123,10 @@ public class SelectToSpeakService extends AccessibilityService {
                     }
                 }
                 if (existingTarget != null) {
-                    existingTarget.amount += amount;
-                    db.assetAccountDao().update(existingTarget);
+                    if (existingTarget.id != assetId) {
+                        existingTarget.amount += amount;
+                        db.assetAccountDao().update(existingTarget);
+                    }
                 } else {
                     AssetAccount newTarget = new AssetAccount(targetObject, 0, liabilityLoanType);
                     newTarget.amount = amount;
@@ -1133,7 +1135,7 @@ public class SelectToSpeakService extends AccessibilityService {
             } else if (type == 0 && remark != null && !remark.isEmpty()) {
                 // 支出还款：检查备注是否匹配负债账户名称
                 AssetAccount liabilityAccount = db.assetAccountDao().getAssetByNameAndType(remark, 1);
-                if (liabilityAccount != null) {
+                if (liabilityAccount != null && liabilityAccount.id != assetId) {
                     liabilityAccount.amount -= amount;
                     if (liabilityAccount.amount <= 0) {
                         liabilityAccount.amount = 0;
@@ -1143,7 +1145,7 @@ public class SelectToSpeakService extends AccessibilityService {
             } else if (type == 1 && remark != null && !remark.isEmpty()) {
                 // 收入收款：检查备注是否匹配借出账户名称
                 AssetAccount lentAccount = db.assetAccountDao().getAssetByNameAndType(remark, 2);
-                if (lentAccount != null) {
+                if (lentAccount != null && lentAccount.id != assetId) {
                     lentAccount.amount -= amount;
                     if (lentAccount.amount <= 0) {
                         lentAccount.amount = 0;

@@ -2314,7 +2314,7 @@ public class RecordFragment extends Fragment {
                                     targetAccount = new AssetAccount(finalTargetObj, amount, targetAssetType);
                                     targetAccount.updateTime = System.currentTimeMillis();
                                     db.assetAccountDao().insert(targetAccount);
-                                } else {
+                                } else if (targetAccount.id != finalAssetId) {
                                     // 对象已存在，直接累加欠款/借出金额
                                     targetAccount.amount += amount;
                                     targetAccount.updateTime = System.currentTimeMillis();
@@ -2323,7 +2323,7 @@ public class RecordFragment extends Fragment {
                             } else if (finalType == 0 && !userRemark.isEmpty()) {
                                 // 支出还款：检查备注是否匹配负债账户名称
                                 AssetAccount liabilityAccount = db.assetAccountDao().getAssetByNameAndType(userRemark, 1);
-                                if (liabilityAccount != null) {
+                                if (liabilityAccount != null && liabilityAccount.id != finalAssetId) {
                                     liabilityAccount.amount -= amount;
                                     if (liabilityAccount.amount <= 0) {
                                         liabilityAccount.amount = 0;
@@ -2334,7 +2334,7 @@ public class RecordFragment extends Fragment {
                             } else if (finalType == 1 && !userRemark.isEmpty()) {
                                 // 收入收款：检查备注是否匹配借出账户名称
                                 AssetAccount lentAccount = db.assetAccountDao().getAssetByNameAndType(userRemark, 2);
-                                if (lentAccount != null) {
+                                if (lentAccount != null && lentAccount.id != finalAssetId) {
                                     lentAccount.amount -= amount;
                                     if (lentAccount.amount <= 0) {
                                         lentAccount.amount = 0;

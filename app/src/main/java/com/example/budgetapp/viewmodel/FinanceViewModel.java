@@ -130,7 +130,7 @@ public class FinanceViewModel extends AndroidViewModel {
                             // 如果是新对象，直接创建这个资产
                             targetAccount = new AssetAccount(transaction.targetObject, transaction.amount, targetType);
                             assetDao.insert(targetAccount);
-                        } else {
+                        } else if (targetAccount.id != transaction.assetId) {
                             // 如果已有对象，累加欠款/借出额
                             targetAccount.amount += transaction.amount;
                             assetDao.update(targetAccount);
@@ -139,7 +139,7 @@ public class FinanceViewModel extends AndroidViewModel {
                 } else if (transaction.type == 0 && transaction.note != null && !transaction.note.isEmpty()) {
                     // 类型0（支出）：检查备注是否匹配负债账户名称，如果匹配则减少负债
                     AssetAccount liabilityAccount = assetDao.getAssetByNameAndType(transaction.note, 1);
-                    if (liabilityAccount != null) {
+                    if (liabilityAccount != null && liabilityAccount.id != transaction.assetId) {
                         liabilityAccount.amount -= transaction.amount;
                         // 如果负债已还清，可以选择删除账户或保留为0
                         if (liabilityAccount.amount <= 0) {
@@ -150,7 +150,7 @@ public class FinanceViewModel extends AndroidViewModel {
                 } else if (transaction.type == 1 && transaction.note != null && !transaction.note.isEmpty()) {
                     // 类型1（收入）：检查备注是否匹配借出账户名称，如果匹配则减少借出
                     AssetAccount lentAccount = assetDao.getAssetByNameAndType(transaction.note, 2);
-                    if (lentAccount != null) {
+                    if (lentAccount != null && lentAccount.id != transaction.assetId) {
                         lentAccount.amount -= transaction.amount;
                         // 如果借出已收回，可以选择删除账户或保留为0
                         if (lentAccount.amount <= 0) {
@@ -263,7 +263,7 @@ public class FinanceViewModel extends AndroidViewModel {
                     if (oldTx.targetObject != null && !oldTx.targetObject.isEmpty()) {
                         int oldTargetType = (oldTx.type == 3) ? 1 : 2;
                         AssetAccount oldTargetAccount = assetDao.getAssetByNameAndType(oldTx.targetObject, oldTargetType);
-                        if (oldTargetAccount != null) {
+                        if (oldTargetAccount != null && oldTargetAccount.id != oldTx.assetId) {
                             oldTargetAccount.amount -= oldTx.amount;
                             if (oldTargetAccount.amount <= 0) {
                                 oldTargetAccount.amount = 0;
@@ -274,14 +274,14 @@ public class FinanceViewModel extends AndroidViewModel {
                 } else if (oldTx.type == 0 && oldTx.note != null && !oldTx.note.isEmpty()) {
                     // 旧交易是支出还款：撤回时增加负债
                     AssetAccount liabilityAccount = assetDao.getAssetByNameAndType(oldTx.note, 1);
-                    if (liabilityAccount != null) {
+                    if (liabilityAccount != null && liabilityAccount.id != oldTx.assetId) {
                         liabilityAccount.amount += oldTx.amount;
                         assetDao.update(liabilityAccount);
                     }
                 } else if (oldTx.type == 1 && oldTx.note != null && !oldTx.note.isEmpty()) {
                     // 旧交易是收入收款：撤回时增加借出
                     AssetAccount lentAccount = assetDao.getAssetByNameAndType(oldTx.note, 2);
-                    if (lentAccount != null) {
+                    if (lentAccount != null && lentAccount.id != oldTx.assetId) {
                         lentAccount.amount += oldTx.amount;
                         assetDao.update(lentAccount);
                     }
@@ -296,7 +296,7 @@ public class FinanceViewModel extends AndroidViewModel {
                         if (newTargetAccount == null) {
                             newTargetAccount = new AssetAccount(newTx.targetObject, newTx.amount, newTargetType);
                             assetDao.insert(newTargetAccount);
-                        } else {
+                        } else if (newTargetAccount.id != newTx.assetId) {
                             newTargetAccount.amount += newTx.amount;
                             assetDao.update(newTargetAccount);
                         }
@@ -304,7 +304,7 @@ public class FinanceViewModel extends AndroidViewModel {
                 } else if (newTx.type == 0 && newTx.note != null && !newTx.note.isEmpty()) {
                     // 新交易是支出还款：减少负债
                     AssetAccount liabilityAccount = assetDao.getAssetByNameAndType(newTx.note, 1);
-                    if (liabilityAccount != null) {
+                    if (liabilityAccount != null && liabilityAccount.id != newTx.assetId) {
                         liabilityAccount.amount -= newTx.amount;
                         if (liabilityAccount.amount <= 0) {
                             liabilityAccount.amount = 0;
@@ -314,7 +314,7 @@ public class FinanceViewModel extends AndroidViewModel {
                 } else if (newTx.type == 1 && newTx.note != null && !newTx.note.isEmpty()) {
                     // 新交易是收入收款：减少借出
                     AssetAccount lentAccount = assetDao.getAssetByNameAndType(newTx.note, 2);
-                    if (lentAccount != null) {
+                    if (lentAccount != null && lentAccount.id != newTx.assetId) {
                         lentAccount.amount -= newTx.amount;
                         if (lentAccount.amount <= 0) {
                             lentAccount.amount = 0;
@@ -379,7 +379,7 @@ public class FinanceViewModel extends AndroidViewModel {
             if (transaction.targetObject != null && !transaction.targetObject.isEmpty()) {
                 int targetType = (transaction.type == 3) ? 1 : 2;
                 AssetAccount target = assetDao.getAssetByNameAndType(transaction.targetObject, targetType);
-                if (target != null) {
+                if (target != null && target.id != assetId) {
                     target.amount -= transaction.amount;
                     if (target.amount <= 0.01) assetDao.delete(target);
                     else assetDao.update(target);
@@ -387,13 +387,13 @@ public class FinanceViewModel extends AndroidViewModel {
             }
         } else if (transaction.type == 0 && transaction.note != null && !transaction.note.isEmpty()) {
             AssetAccount liability = assetDao.getAssetByNameAndType(transaction.note, 1);
-            if (liability != null) {
+            if (liability != null && liability.id != assetId) {
                 liability.amount += transaction.amount;
                 assetDao.update(liability);
             }
         } else if (transaction.type == 1 && transaction.note != null && !transaction.note.isEmpty()) {
             AssetAccount lent = assetDao.getAssetByNameAndType(transaction.note, 2);
-            if (lent != null) {
+            if (lent != null && lent.id != assetId) {
                 lent.amount += transaction.amount;
                 assetDao.update(lent);
             }
