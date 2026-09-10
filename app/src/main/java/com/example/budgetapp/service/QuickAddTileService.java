@@ -362,6 +362,10 @@ public class QuickAddTileService extends TileService {
                 }
                 try {
                     double finalAmount = Double.parseDouble(amountStr);
+                    if (!Double.isFinite(finalAmount) || finalAmount <= 0) {
+                        Toast.makeText(this, "金额必须大于 0", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
                     String finalNote = etNote.getText().toString();
                     String finalRemark = etRemark.getText().toString().trim();
 

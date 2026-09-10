@@ -490,18 +490,11 @@ public class BudgetFragment extends Fragment {
 
         // 【修复1】修正时间边界：涵盖整个月，防止丢失未来日期（但属本月）的账单
         long startOfMonth = today.withDayOfMonth(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        // 本月最后一天加1天，获取下个月零点作为结束边界 (减 1 毫秒即本月末)
-        long endOfMonth = today.withDayOfMonth(today.lengthOfMonth()).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1;
-
-        if (transactions != null) {
-            for (Transaction t : transactions) {
-                // 【修改点】：增加不计入预算和资产互转的过滤
-                boolean isTransfer = "资产互转".equals(t.category);
-                if (t.date >= startOfMonth && t.date <= endOfMonth && t.type == 0 && !isTransfer && !t.excludeFromBudget) {
-                    actualExpenseSoFar += t.amount;
-                }
-            }
-        }
+        // 下个月零点作为结束边界，支持跨日摊销并排除不计入预算的流水。
+        long endOfMonthExclusive = today.withDayOfMonth(today.lengthOfMonth()).plusDays(1)
+                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        actualExpenseSoFar = BudgetCalculator.expenseBetween(
+                transactions, startOfMonth, endOfMonthExclusive);
 
         // 【修复3】总结余应该是真实剩余预算 = 总预算 - 实际总支出
         double monthRemaining = monthlyBudget - actualExpenseSoFar;
@@ -550,6 +543,7 @@ public class BudgetFragment extends Fragment {
         view.findViewById(R.id.btn_save).setOnClickListener(v -> {
             try {
                 float newBudget = Float.parseFloat(etBudget.getText().toString());
+                if (!Float.isFinite(newBudget) || newBudget <= 0) throw new IllegalArgumentException();
                 prefs.edit().putFloat(monthKey, newBudget).apply();
                 if (prefs.getLong("budget_start_time", 0) == 0) {
                     prefs.edit().putLong("budget_start_time", System.currentTimeMillis()).apply();
@@ -581,10 +575,16 @@ public class BudgetFragment extends Fragment {
             String name = etName.getText().toString().trim();
             String targetStr = etTarget.getText().toString().trim();
             if (!name.isEmpty() && !targetStr.isEmpty()) {
-                long startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-                Goal goal = new Goal(name, Double.parseDouble(targetStr), 0, false, startOfDay);
-                viewModel.insertGoal(goal);
-                dialog.dismiss();
+                try {
+                    double target = Double.parseDouble(targetStr);
+                    if (!Double.isFinite(target) || target <= 0) throw new IllegalArgumentException();
+                    long startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    Goal goal = new Goal(name, target, 0, false, startOfDay);
+                    viewModel.insertGoal(goal);
+                    dialog.dismiss();
+                } catch (Exception e) {
+                    Toast.makeText(getContext(), "目标金额必须大于 0", Toast.LENGTH_SHORT).show();
+                }
             } else {
                 Toast.makeText(getContext(), "请输入完整信息", Toast.LENGTH_SHORT).show();
             }
@@ -626,7 +626,10 @@ public class BudgetFragment extends Fragment {
                 LocalDate s = LocalDate.parse(start.getText().toString().trim());
                 LocalDate e = LocalDate.parse(end.getText().toString().trim());
                 double total = Double.parseDouble(amount.getText().toString().trim());
-                if (name.getText().toString().trim().isEmpty() || e.isBefore(s) || total <= 0) throw new IllegalArgumentException();
+                if (name.getText().toString().trim().isEmpty() || e.isBefore(s)
+                        || !Double.isFinite(total) || total <= 0) {
+                    throw new IllegalArgumentException();
+                }
                 long sm = s.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
                 long em = e.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
                 if (existing == null) {
@@ -772,6 +775,10 @@ public class BudgetFragment extends Fragment {
                 goal.name = etName.getText().toString();
                 goal.targetAmount = Double.parseDouble(etTarget.getText().toString());
                 goal.savedAmount = Double.parseDouble(etSaved.getText().toString());
+                if (!Double.isFinite(goal.targetAmount) || goal.targetAmount <= 0
+                        || !Double.isFinite(goal.savedAmount) || goal.savedAmount < 0) {
+                    throw new IllegalArgumentException();
+                }
                 if (cbPriority.isChecked()) {
                     viewModel.setPriorityGoal(goal);
                 } else {
@@ -881,16 +888,10 @@ public class BudgetFragment extends Fragment {
                         ? BudgetCalculator.distributeEvenly(monthBudget, d.lengthOfMonth())
                         .get(d.getDayOfMonth() - 1) : 0;
 
-                double expenseToday = 0;
                 long startOfDay = d.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
                 long endOfDay = d.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-                for (Transaction t : allTransactions) {
-                    // 【修改点】：增加不计入预算和资产互转的过滤
-                    boolean isTransfer = "资产互转".equals(t.category);
-                    if (t.date >= startOfDay && t.date < endOfDay && t.type == 0 && !isTransfer && !t.excludeFromBudget) {
-                        expenseToday += t.amount;
-                    }
-                }
+                double expenseToday = BudgetCalculator.expenseBetween(
+                        allTransactions, startOfDay, endOfDay);
 
                 boolean hasActiveGoal = false;
                 for (Goal g : sortedGoals) {

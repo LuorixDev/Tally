@@ -16,6 +16,10 @@ import com.example.budgetapp.database.TransactionDao;
 
 import java.util.Calendar;
 import java.util.List;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 
 /**
  * 活期理财每日计息服务
@@ -58,11 +62,10 @@ public class DailyInterestService extends BroadcastReceiver {
             if (lastDate == 0) {
                 long depositStart = asset.depositDate > 0 ? asset.depositDate : asset.updateTime;
                 daysToCalculate = daysBetween(depositStart, todayStart);
-                if (daysToCalculate <= 0) daysToCalculate = 1;
             } else {
                 daysToCalculate = daysBetween(lastDate, todayStart);
-                if (daysToCalculate <= 0) daysToCalculate = 1;
             }
+            if (daysToCalculate <= 0) continue;
 
             double dailyRate = asset.interestRate / 100.0 / 365.0;
             double totalInterest = 0;
@@ -108,9 +111,11 @@ public class DailyInterestService extends BroadcastReceiver {
     }
 
     private long daysBetween(long startMillis, long endMillis) {
-        long startDay = startMillis / (24 * 60 * 60 * 1000L);
-        long endDay = endMillis / (24 * 60 * 60 * 1000L);
-        return Math.max(1, endDay - startDay);
+        LocalDate start = Instant.ofEpochMilli(startMillis)
+                .atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate end = Instant.ofEpochMilli(endMillis)
+                .atZone(ZoneId.systemDefault()).toLocalDate();
+        return ChronoUnit.DAYS.between(start, end);
     }
 
     /**

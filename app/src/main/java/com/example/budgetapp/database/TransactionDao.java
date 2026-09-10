@@ -55,8 +55,11 @@ public interface TransactionDao {
 
     // ================= 以下为新增的高性能优化查询 =================
 
-    // 1. 按需查询：只获取指定时间段内的账单（用于首页日历按月加载）
-    @Query("SELECT * FROM transactions WHERE date >= :start AND date <= :end ORDER BY date DESC")
+    // 1. 按需查询：包含原始账单日和覆盖当前时间段的跨日摊销账单（用于首页日历按月加载）
+    @Query("SELECT * FROM transactions WHERE " +
+            "(date >= :start AND date <= :end) OR " +
+            "(spreadStartDate > 0 AND spreadStartDate <= :end AND spreadEndDate >= :start) " +
+            "ORDER BY date DESC")
     LiveData<List<Transaction>> getTransactionsByRangeLive(long start, long end);
 
     // 2. 高级过滤：用于明细页 (DetailsFragment) 的高级筛选，null 表示该条件不限制

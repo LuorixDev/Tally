@@ -1389,7 +1389,17 @@ public class DetailsFragment extends Fragment {
         btnSave.setOnClickListener(v -> {
             String amountStr = etAmount.getText().toString();
             if (!amountStr.isEmpty()) {
-                double amount = Double.parseDouble(amountStr);
+                double amount;
+                try {
+                    amount = Double.parseDouble(amountStr);
+                } catch (NumberFormatException e) {
+                    Toast.makeText(getContext(), "金额格式不正确", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (!Double.isFinite(amount) || amount <= 0) {
+                    Toast.makeText(getContext(), "金额必须大于 0", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 int type = rgType.getCheckedRadioButtonId() == R.id.rb_income ? 1 : 0;
 
                 String category = selectedCategory[0];

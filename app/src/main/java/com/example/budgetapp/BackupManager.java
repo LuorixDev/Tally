@@ -1161,7 +1161,7 @@ public class BackupManager {
         // -------------------------
         csvBuilder.append("=== 资产账户列表 ===\n");
         // 【修改】加入 "计入总资产" 和 "图标"
-        csvBuilder.append("ID,账户名称,余额,类型,币种,计入总资产,图标,资产分类\n");
+        csvBuilder.append("ID,账户名称,余额,类型,币种,计入总资产,图标,资产分类,定期,期限月,年利率,预计结算,存入时间,复利,总期数,每期金额,已还期数\n");
         for (AssetAccount asset : assets) {
             csvBuilder.append(asset.id).append(",");
             csvBuilder.append(escapeCsv(asset.name)).append(",");
@@ -1170,6 +1170,8 @@ public class BackupManager {
             switch (asset.type) {
                 case 1: assetTypeStr = "负债"; break;
                 case 2: assetTypeStr = "借出"; break;
+                case 3: assetTypeStr = "理财"; break;
+                case 4: assetTypeStr = "分期"; break;
                 default: assetTypeStr = "资产"; break;
             }
             csvBuilder.append(assetTypeStr).append(",");
@@ -1177,7 +1179,16 @@ public class BackupManager {
             csvBuilder.append(escapeCsv(symbol)).append(",");
             csvBuilder.append(asset.isIncludedInTotal).append(",");
             csvBuilder.append(escapeCsv(asset.svgIcon == null ? "" : asset.svgIcon)).append(",");
-            csvBuilder.append(escapeCsv(asset.assetCategory == null ? "" : asset.assetCategory)).append("\n");
+            csvBuilder.append(escapeCsv(asset.assetCategory == null ? "" : asset.assetCategory)).append(",");
+            csvBuilder.append(asset.isFixedTerm).append(",");
+            csvBuilder.append(asset.durationMonths).append(",");
+            csvBuilder.append(asset.interestRate).append(",");
+            csvBuilder.append(asset.expectedReturn).append(",");
+            csvBuilder.append(asset.depositDate).append(",");
+            csvBuilder.append(asset.isCompoundInterest).append(",");
+            csvBuilder.append(asset.totalInstallments).append(",");
+            csvBuilder.append(asset.installmentAmount).append(",");
+            csvBuilder.append(escapeCsv(asset.paidInstallments)).append("\n");
         }
         csvBuilder.append("\n\n");
 
@@ -1274,13 +1285,20 @@ public class BackupManager {
         // -------------------------
         csvBuilder.append("=== 交易记录 ===\n");
         // 【修改】加入币种
-        csvBuilder.append("交易ID,时间,类型,分类,金额,资产账户,记录标识,备注,二级分类,币种\n");
+        csvBuilder.append("交易ID,时间,类型,分类,金额,资产账户,记录标识,备注,二级分类,币种,不计入预算,负债借出对象,摊销开始,摊销结束,照片\n");
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy年MM月dd日", Locale.CHINA);
 
         for (Transaction t : transactions) {
             csvBuilder.append(t.id).append(",");
             csvBuilder.append(sdf.format(new Date(t.date))).append(",");
-            String typeStr = (t.type == 0) ? "支出" : (t.type == 1 ? "收入" : "其他");
+            String typeStr;
+            switch (t.type) {
+                case 0: typeStr = "支出"; break;
+                case 1: typeStr = "收入"; break;
+                case 3: typeStr = "负债"; break;
+                case 4: typeStr = "借出"; break;
+                default: typeStr = "转账"; break;
+            }
             csvBuilder.append(typeStr).append(",");
             csvBuilder.append(escapeCsv(t.category)).append(",");
             csvBuilder.append(t.amount).append(",");
@@ -1291,7 +1309,12 @@ public class BackupManager {
             csvBuilder.append(escapeCsv(t.remark)).append(",");
             csvBuilder.append(escapeCsv(t.subCategory)).append(",");
             String currency = (t.currencySymbol == null) ? "¥" : t.currencySymbol;
-            csvBuilder.append(escapeCsv(currency)).append("\n"); // 【新增】多币种支持
+            csvBuilder.append(escapeCsv(currency)).append(",");
+            csvBuilder.append(t.excludeFromBudget).append(",");
+            csvBuilder.append(escapeCsv(t.targetObject)).append(",");
+            csvBuilder.append(t.spreadStartDate).append(",");
+            csvBuilder.append(t.spreadEndDate).append(",");
+            csvBuilder.append(escapeCsv(t.photoPath)).append("\n");
         }
 
         try (OutputStream outputStream = context.getContentResolver().openOutputStream(uri)) {
@@ -1394,12 +1417,23 @@ public class BackupManager {
                 int type = 0;
                 if ("负债".equals(typeStr)) type = 1;
                 else if ("借出".equals(typeStr)) type = 2;
+                else if ("理财".equals(typeStr)) type = 3;
+                else if ("分期".equals(typeStr)) type = 4;
                 AssetAccount asset = new AssetAccount(name, amount, type);
                 asset.id = id;
                 asset.currencySymbol = symbol;
                 asset.svgIcon = row.size() > 6 ? row.get(6) : "";
                 asset.assetCategory = row.size() > 7 ? row.get(7) : "";
                 asset.isIncludedInTotal = included; // 【新增】计入总资产
+                if (row.size() > 8) asset.isFixedTerm = Boolean.parseBoolean(row.get(8));
+                if (row.size() > 9) asset.durationMonths = Integer.parseInt(row.get(9));
+                if (row.size() > 10) asset.interestRate = parseDoubleSafe(row.get(10));
+                if (row.size() > 11) asset.expectedReturn = parseDoubleSafe(row.get(11));
+                if (row.size() > 12) asset.depositDate = (long) parseDoubleSafe(row.get(12));
+                if (row.size() > 13) asset.isCompoundInterest = Boolean.parseBoolean(row.get(13));
+                if (row.size() > 14) asset.totalInstallments = Integer.parseInt(row.get(14));
+                if (row.size() > 15) asset.installmentAmount = parseDoubleSafe(row.get(15));
+                if (row.size() > 16) asset.paidInstallments = row.get(16);
                 assets.add(asset);
                 assetNameToIdMap.put(name, id);
             } catch (Exception e) {
@@ -1418,7 +1452,11 @@ public class BackupManager {
                 Date date = sdf.parse(row.get(1));
                 t.date = (date != null) ? date.getTime() : System.currentTimeMillis();
                 String typeStr = row.get(2);
-                t.type = "收入".equals(typeStr) ? 1 : ("支出".equals(typeStr) ? 0 : 2);
+                if ("收入".equals(typeStr)) t.type = 1;
+                else if ("支出".equals(typeStr)) t.type = 0;
+                else if ("负债".equals(typeStr)) t.type = 3;
+                else if ("借出".equals(typeStr)) t.type = 4;
+                else t.type = 2;
                 t.category = row.get(3);
                 t.amount = parseDoubleSafe(row.get(4));
                 String assetName = (row.size() > 5) ? row.get(5) : "";
@@ -1427,6 +1465,11 @@ public class BackupManager {
                 t.remark = (row.size() > 7) ? row.get(7) : "";
                 t.subCategory = (row.size() > 8) ? row.get(8) : "";
                 t.currencySymbol = (row.size() > 9) ? row.get(9) : "¥"; // 【新增】恢复多币种
+                if (row.size() > 10) t.excludeFromBudget = Boolean.parseBoolean(row.get(10));
+                if (row.size() > 11) t.targetObject = row.get(11);
+                if (row.size() > 12) t.spreadStartDate = (long) parseDoubleSafe(row.get(12));
+                if (row.size() > 13) t.spreadEndDate = (long) parseDoubleSafe(row.get(13));
+                if (row.size() > 14) t.photoPath = row.get(14);
                 transactions.add(t);
             } catch (Exception e) {
                 Log.e("BackupManager", "解析交易行失败", e);
@@ -1697,7 +1740,7 @@ public class BackupManager {
                 }
 
                 String amountStr = getCellText(row.getCell(5)).replace("¥", "").replace(",", "").trim();
-                t.amount = parseDoubleSafe(amountStr);
+                t.amount = Math.abs(parseDoubleSafe(amountStr));
 
                 String paymentMethod = getCellText(row.getCell(6)).trim();
                 int matchedId = matchAssetId(paymentMethod, allAssets);
@@ -1814,7 +1857,7 @@ public class BackupManager {
                 else t.type = 0;
 
                 String amountStr = tokens.get(5).replace("¥", "").replace(",", "").trim();
-                t.amount = parseDoubleSafe(amountStr);
+                t.amount = Math.abs(parseDoubleSafe(amountStr));
 
                 String paymentMethod = tokens.get(6).trim();
                 int matchedId = matchAssetId(paymentMethod, allAssets);
@@ -1964,7 +2007,7 @@ public class BackupManager {
                 }
 
                 String amountStr = tokens.get(amountIdx).replace("¥", "").replace(",", "").trim();
-                t.amount = parseDoubleSafe(amountStr);
+                t.amount = Math.abs(parseDoubleSafe(amountStr));
 
                 String paymentMethod = (paymentIdx != -1) ? tokens.get(paymentIdx).trim() : "";
                 int matchedId = matchAssetId(paymentMethod, allAssets);
@@ -2063,7 +2106,12 @@ public class BackupManager {
     }
 
     private static double parseDoubleSafe(String val) {
-        try { return Double.parseDouble(val); } catch (Exception e) { return 0.0; }
+        try {
+            double value = Double.parseDouble(val);
+            return Double.isFinite(value) ? value : 0.0;
+        } catch (Exception e) {
+            return 0.0;
+        }
     }
     
     private static String escapeCsv(String value) {

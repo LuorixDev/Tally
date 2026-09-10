@@ -155,15 +155,10 @@ public class BudgetHistoryActivity extends AppCompatActivity {
             double dailyBudget = activeMonthBudget > 0
                     ? BudgetCalculator.distributeEvenly(activeMonthBudget, d.lengthOfMonth())
                     .get(d.getDayOfMonth() - 1) : 0;
-            double expenseToday = 0;
             long startOfDay = d.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
             long endOfDay = d.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-
-            for (Transaction t : transactions) {
-                if (t.date >= startOfDay && t.date < endOfDay && t.type == 0) {
-                    expenseToday += t.amount;
-                }
-            }
+            double expenseToday = BudgetCalculator.expenseBetween(
+                    transactions, startOfDay, endOfDay);
 
             currentMonthExpense += expenseToday;
 

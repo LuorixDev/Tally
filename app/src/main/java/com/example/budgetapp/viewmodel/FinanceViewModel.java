@@ -204,7 +204,14 @@ public class FinanceViewModel extends AndroidViewModel {
 
     public void deleteTransaction(Transaction transaction) {
         AppDatabase.databaseWriteExecutor.execute(() -> {
-            transactionDao.delete(transaction);
+            database.runInTransaction(() -> {
+                if (transaction.type == 2) {
+                    revertTransferBalance(transaction);
+                } else {
+                    revertTransactionLinkedBalances(transaction, transaction.assetId);
+                }
+                transactionDao.delete(transaction);
+            });
             com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
             notifyWidgetUpdate(); // 【新增】
         });
@@ -326,8 +333,8 @@ public class FinanceViewModel extends AndroidViewModel {
 
     // 【增强】撤回账单对己方资产的影响 (兼容 0支出, 1收入, 3负债, 4借出)
     private void revertAssetBalance(AssetAccount asset, Transaction tx) {
-        if (asset.type == 0) {
-            // 普通资产账户：撤回支出(0)和借出(4)余额增加，撤回收入(1)和负债借入(3)余额减少
+        if (asset.type == 0 || asset.type == 3) {
+            // 普通资产/理财账户：撤回支出(0)和借出(4)余额增加，撤回收入(1)和负债借入(3)余额减少
             if (tx.type == 0 || tx.type == 4) asset.amount += tx.amount;
             else if (tx.type == 1 || tx.type == 3) asset.amount -= tx.amount;
         } else if (asset.type == 1) {
@@ -343,8 +350,8 @@ public class FinanceViewModel extends AndroidViewModel {
 
     // 【增强】应用账单对己方资产的影响 (兼容 0支出, 1收入, 3负债, 4借出)
     private void applyAssetBalance(AssetAccount asset, Transaction tx) {
-        if (asset.type == 0) {
-            // 普通资产账户：支出(0)和借出(4)余额减少，收入(1)和负债借入(3)余额增加
+        if (asset.type == 0 || asset.type == 3) {
+            // 普通资产/理财账户：支出(0)和借出(4)余额减少，收入(1)和负债借入(3)余额增加
             if (tx.type == 0 || tx.type == 4) asset.amount -= tx.amount;
             else if (tx.type == 1 || tx.type == 3) asset.amount += tx.amount;
         } else if (asset.type == 1) {
@@ -356,6 +363,104 @@ public class FinanceViewModel extends AndroidViewModel {
             if (tx.type == 0 || tx.type == 4) asset.amount += tx.amount;
             else if (tx.type == 1 || tx.type == 3) asset.amount -= tx.amount;
         }
+    }
+
+    private void revertTransactionLinkedBalances(Transaction transaction, int fallbackAssetId) {
+        int assetId = fallbackAssetId != 0 ? fallbackAssetId : transaction.assetId;
+        if (assetId != 0) {
+            AssetAccount asset = assetDao.getAssetByIdSync(assetId);
+            if (asset != null) {
+                revertAssetBalance(asset, transaction);
+                assetDao.update(asset);
+            }
+        }
+
+        if (transaction.type == 3 || transaction.type == 4) {
+            if (transaction.targetObject != null && !transaction.targetObject.isEmpty()) {
+                int targetType = (transaction.type == 3) ? 1 : 2;
+                AssetAccount target = assetDao.getAssetByNameAndType(transaction.targetObject, targetType);
+                if (target != null) {
+                    target.amount -= transaction.amount;
+                    if (target.amount <= 0.01) assetDao.delete(target);
+                    else assetDao.update(target);
+                }
+            }
+        } else if (transaction.type == 0 && transaction.note != null && !transaction.note.isEmpty()) {
+            AssetAccount liability = assetDao.getAssetByNameAndType(transaction.note, 1);
+            if (liability != null) {
+                liability.amount += transaction.amount;
+                assetDao.update(liability);
+            }
+        } else if (transaction.type == 1 && transaction.note != null && !transaction.note.isEmpty()) {
+            AssetAccount lent = assetDao.getAssetByNameAndType(transaction.note, 2);
+            if (lent != null) {
+                lent.amount += transaction.amount;
+                assetDao.update(lent);
+            }
+        }
+    }
+
+    private void revertTransferBalance(Transaction transaction) {
+        AssetAccount fromAccount = assetDao.getAssetByIdSync(transaction.assetId);
+        if (fromAccount != null) {
+            if (fromAccount.type == 1) fromAccount.amount -= transaction.amount;
+            else fromAccount.amount += transaction.amount;
+            assetDao.update(fromAccount);
+        }
+
+        AssetAccount toAccount = findTransferTargetAccount(transaction);
+        if (toAccount != null) {
+            double targetAmount = getTransferTargetAmount(transaction, toAccount);
+            if (toAccount.type == 1) toAccount.amount += targetAmount;
+            else toAccount.amount -= targetAmount;
+            assetDao.update(toAccount);
+        }
+    }
+
+    private AssetAccount findTransferTargetAccount(Transaction transaction) {
+        if (transaction.targetObject != null && !transaction.targetObject.isEmpty()) {
+            try {
+                AssetAccount target = assetDao.getAssetByIdSync(Integer.parseInt(transaction.targetObject));
+                if (target != null) return target;
+            } catch (NumberFormatException ignored) {}
+        }
+
+        String note = transaction.note == null ? "" : transaction.note;
+        int arrow = note.indexOf(" -> ");
+        if (arrow < 0) return null;
+        String afterArrow = note.substring(arrow + 4).trim();
+        int metadataStart = afterArrow.indexOf(" | ");
+        if (metadataStart >= 0) afterArrow = afterArrow.substring(0, metadataStart).trim();
+
+        AssetAccount bestMatch = null;
+        for (AssetAccount account : assetDao.getAllAssetsSync()) {
+            if (account.id == transaction.assetId || account.name == null || account.name.isEmpty()) continue;
+            if (afterArrow.startsWith(account.name)
+                    && (bestMatch == null || account.name.length() > bestMatch.name.length())) {
+                bestMatch = account;
+            }
+        }
+        return bestMatch;
+    }
+
+    private double getTransferTargetAmount(Transaction transaction, AssetAccount targetAccount) {
+        String note = transaction.note == null ? "" : transaction.note;
+        int arrow = note.indexOf(" -> ");
+        if (arrow >= 0 && targetAccount.name != null) {
+            String afterArrow = note.substring(arrow + 4).trim();
+            if (afterArrow.startsWith(targetAccount.name)) {
+                afterArrow = afterArrow.substring(targetAccount.name.length());
+            }
+            java.util.regex.Matcher amountMatcher = java.util.regex.Pattern
+                    .compile("\\([^0-9]*([0-9]+(?:\\.[0-9]+)?)")
+                    .matcher(afterArrow);
+            if (amountMatcher.find()) {
+                try {
+                    return Double.parseDouble(amountMatcher.group(1));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return Math.max(0, transaction.amount);
     }
 
     // ================= 资产账户 (Asset) 相关 =================
@@ -495,61 +600,8 @@ public class FinanceViewModel extends AndroidViewModel {
             database.runInTransaction(() -> {
                 // 1. 删除交易流水
                 transactionDao.delete(transaction);
-
-                // 2. 撤回己方支付账户余额 (如微信、支付宝)
-                if (targetAssetId != 0) {
-                    AssetAccount asset = assetDao.getAssetByIdSync(targetAssetId);
-                    if (asset != null) {
-                        if (asset.type == 0) {
-                            // 普通资产账户：撤回支出(0)或借出(4)余额增加，撤回收入(1)或负债借入(3)余额减少
-                            if (transaction.type == 0 || transaction.type == 4) asset.amount += transaction.amount;
-                            else if (transaction.type == 1 || transaction.type == 3) asset.amount -= transaction.amount;
-                        } else if (asset.type == 1) {
-                            // 负债账户(信用卡)：撤回支出(0)/借出(4)负债减少，撤回收入(1)/借入(3)负债增加
-                            if (transaction.type == 0 || transaction.type == 4) asset.amount -= transaction.amount;
-                            else if (transaction.type == 1 || transaction.type == 3) asset.amount += transaction.amount;
-                        } else if (asset.type == 2) {
-                            // 借出账户：撤回支出(0)/借出(4)借出减少，撤回收入(1)/借入(3)借出增加（撤回还款）
-                            if (transaction.type == 0 || transaction.type == 4) asset.amount -= transaction.amount;
-                            else if (transaction.type == 1 || transaction.type == 3) asset.amount += transaction.amount;
-                        }
-                        assetDao.update(asset);
-                    }
-                }
-
-                // 3. 撤回对方资产 (负债/借出对象) 并自动删除归零账户
-                if (transaction.type == 3 || transaction.type == 4) {
-                    // 撤回负债借入或借出：减少对应账户金额
-                    if (transaction.targetObject != null && !transaction.targetObject.isEmpty()) {
-                        int targetAssetType = (transaction.type == 3) ? 1 : 2; // 3->负债区(1), 4->借出区(2)
-                        AssetAccount targetAccount = assetDao.getAssetByNameAndType(transaction.targetObject, targetAssetType);
-                        if (targetAccount != null) {
-                            // 撤回时，扣除这笔交易带来的欠款/借出金额
-                            targetAccount.amount -= transaction.amount;
-
-                            // 【预期效果实现】：如果撤回后，该对象欠款/借款金额归零（处理浮点精度 <= 0.01），则直接删除该资产
-                            if (targetAccount.amount <= 0.01) {
-                                assetDao.delete(targetAccount);
-                            } else {
-                                assetDao.update(targetAccount);
-                            }
-                        }
-                    }
-                } else if (transaction.type == 0 && transaction.note != null && !transaction.note.isEmpty()) {
-                    // 撤回支出还款：增加负债
-                    AssetAccount liabilityAccount = assetDao.getAssetByNameAndType(transaction.note, 1);
-                    if (liabilityAccount != null) {
-                        liabilityAccount.amount += transaction.amount;
-                        assetDao.update(liabilityAccount);
-                    }
-                } else if (transaction.type == 1 && transaction.note != null && !transaction.note.isEmpty()) {
-                    // 撤回收入收款：增加借出
-                    AssetAccount lentAccount = assetDao.getAssetByNameAndType(transaction.note, 2);
-                    if (lentAccount != null) {
-                        lentAccount.amount += transaction.amount;
-                        assetDao.update(lentAccount);
-                    }
-                }
+                // 2. 撤回交易对己方资产及负债/借出账户的影响
+                revertTransactionLinkedBalances(transaction, targetAssetId);
             });
             com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
             notifyWidgetUpdate(); // 【新增】撤回完成后通知刷新
@@ -634,6 +686,10 @@ public class FinanceViewModel extends AndroidViewModel {
                     // 实际转账金额按汇率转换
                     double convertedAmount = convertAmountSync(rateManager, amount, fromCurrencyCode, toCurrencyCode);
                     double convertedDiscount = convertAmountSync(rateManager, discount, fromCurrencyCode, toCurrencyCode);
+                    if (Double.isNaN(convertedAmount) || Double.isNaN(convertedDiscount)) {
+                        android.util.Log.e("FinanceViewModel", "Missing exchange rate; transfer aborted");
+                        return;
+                    }
                     double convertedActualDeduct = convertedAmount - convertedDiscount;
                     
                     // 1. 处理转出账户余额 (以转出币种的实际扣款金额计算)
@@ -668,6 +724,7 @@ public class FinanceViewModel extends AndroidViewModel {
                     transaction.note = noteContent + (note.isEmpty() ? "" : " | 备注: " + note);
                     transaction.date = System.currentTimeMillis();
                     transaction.assetId = fromAccount.id;
+                    transaction.targetObject = String.valueOf(toAccount.id);
 
                     transactionDao.insert(transaction);
                     com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
@@ -713,6 +770,7 @@ public class FinanceViewModel extends AndroidViewModel {
             transaction.note = noteContent + (note.isEmpty() ? "" : " | 备注: " + note);
             transaction.date = System.currentTimeMillis();
             transaction.assetId = fromAccount.id; // 关联转出账户
+            transaction.targetObject = String.valueOf(toAccount.id);
 
             transactionDao.insert(transaction);
             com.example.budgetapp.BackupManager.triggerAutoUploadIfEnabled(getApplication());
@@ -757,41 +815,15 @@ public class FinanceViewModel extends AndroidViewModel {
             android.util.Log.e("FinanceViewModel", "Error converting currency", e);
         }
         
-        // 如果无法转换，返回原金额
-        return amount;
+        // 缺少有效汇率时返回 NaN，调用方必须中止转账，不能按 1:1 入账。
+        return Double.NaN;
     }
     
     /**
      * 将货币符号转换为货币代码
      */
     private String getCurrencyCode(String symbol) {
-        switch (symbol) {
-            case "¥": return "CNY";
-            case "$": return "USD";
-            case "€": return "EUR";
-            case "£": return "GBP";
-            case "₹": return "INR";
-            case "¢": return "JPY";
-            case "₩": return "KRW";
-            case "A$": return "AUD";
-            case "C$": return "CAD";
-            case "HK$": return "HKD";
-            case "S$": return "SGD";
-            case "₽": return "RUB";
-            case "R$": return "BRL";
-            case "R": return "ZAR";
-            case "₺": return "TRY";
-            case "฿": return "THB";
-            case "₱": return "PHP";
-            case "Rp": return "IDR";
-            case "RM": return "MYR";
-            case "₫": return "VND";
-            case "NT$": return "TWD";
-            case "Fr": return "CHF";
-            case "kr": return "SEK";
-            case "zł": return "PLN";
-            default: return "CNY";
-        }
+        return com.example.budgetapp.util.CurrencyUtils.symbolToCode(symbol);
     }
 // ================= 新增：动态按需加载 API =================
 

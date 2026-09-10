@@ -1330,31 +1330,35 @@ public class RecordFragment extends Fragment {
         double totalOvertimeHours = 0; // 计算加班总工时
         int year = currentMonth.getYear();
         int month = currentMonth.getMonthValue();
+        long monthStart = currentMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long monthEnd = currentMonth.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
 
         for (Transaction t : transactions) {
-            LocalDate date = Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalDate();
-            if (date.getYear() == year && date.getMonthValue() == month) {
-                boolean isTransfer = (t.type == 2) || "资产互转".equals(t.category);
-                if (isTransfer) {
-                    continue; // 🌟 1. 彻底跳过资产互转，不计入月度收支
-                } else if (t.type == 1) {
-                    if ("加班".equals(t.category)) {
-                        totalOvertimeAmount += t.amount;
-                        // 提取工时数据
-                        if (t.note != null) {
-                            Matcher m = Pattern.compile("时长:\\s*([0-9.]+)\\s*小时").matcher(t.note);
-                            if (m.find()) {
-                                try {
-                                    totalOvertimeHours += Double.parseDouble(m.group(1));
-                                } catch (NumberFormatException ignored) {}
-                            }
+            boolean isTransfer = (t.type == 2) || "资产互转".equals(t.category);
+            if (isTransfer) continue;
+
+            double amountInMonth = BudgetCalculator.amountBetween(t, monthStart, monthEnd);
+            if (amountInMonth <= 0) continue;
+
+            if (t.type == 1) {
+                if ("加班".equals(t.category)) {
+                    totalOvertimeAmount += amountInMonth;
+                    LocalDate transactionDate = Instant.ofEpochMilli(t.date)
+                            .atZone(ZoneId.systemDefault()).toLocalDate();
+                    if (transactionDate.getYear() == year && transactionDate.getMonthValue() == month
+                            && t.note != null) {
+                        Matcher m = Pattern.compile("时长:\\s*([0-9.]+)\\s*小时").matcher(t.note);
+                        if (m.find()) {
+                            try {
+                                totalOvertimeHours += Double.parseDouble(m.group(1));
+                            } catch (NumberFormatException ignored) {}
                         }
-                    } else {
-                        totalIncome += t.amount;
                     }
-                } else if (t.type == 0) { // 🌟 严格限制必须是 type == 0 才是支出
-                    totalExpense += t.amount;
+                } else {
+                    totalIncome += amountInMonth;
                 }
+            } else if (t.type == 0) {
+                totalExpense += amountInMonth;
             }
         }
         double balance = totalIncome - totalExpense;
@@ -2182,7 +2186,17 @@ public class RecordFragment extends Fragment {
 
             String amountStr = etAmount.getText().toString();
             if (!amountStr.isEmpty()) {
-                double amount = Double.parseDouble(amountStr);
+                double amount;
+                try {
+                    amount = Double.parseDouble(amountStr);
+                } catch (NumberFormatException e) {
+                    Toast.makeText(getContext(), "金额格式不正确", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (!Double.isFinite(amount) || amount <= 0) {
+                    Toast.makeText(getContext(), "金额必须大于 0", Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
                 // 1. 判断类型
                 int type = 0;
