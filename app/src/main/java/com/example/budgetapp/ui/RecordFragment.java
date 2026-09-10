@@ -138,6 +138,7 @@ public class RecordFragment extends Fragment {
     private RecyclerView rvBudgetPlans;
     private List<BudgetPlan> budgetPlans = new ArrayList<>();
     private List<BudgetPlan> activeBudgetPlans = new ArrayList<>();
+    private List<Transaction> fullTransactionHistory = new ArrayList<>();
 
     // 账单滑动卡片相关
     private View layoutBillSlider;
@@ -348,9 +349,18 @@ public class RecordFragment extends Fragment {
         rvBudgetPlans = view.findViewById(R.id.rv_budget_plans);
         rvBudgetPlans.setLayoutManager(new LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false));
         rvBudgetPlans.setAdapter(new RecordBudgetPlanAdapter());
+        // 全量交易也必须在生命周期内订阅；仅读取 getValue() 会与月份查询在
+        // 后台账单更新后恢复时产生竞态，导致部分预算控件停留在旧数据。
+        viewModel.getAllTransactions().observe(getViewLifecycleOwner(), transactions -> {
+            fullTransactionHistory = transactions == null ? new ArrayList<>() : transactions;
+            List<Transaction> rangeTransactions = viewModel.getRangeTransactions().getValue();
+            if (rangeTransactions != null) {
+                updateBudgetCard(rangeTransactions);
+            }
+        });
         viewModel.getAllBudgetPlans().observe(getViewLifecycleOwner(), plans -> {
             budgetPlans = plans == null ? new ArrayList<>() : new ArrayList<>(plans);
-            List<Transaction> transactions = viewModel.getAllTransactions().getValue();
+            List<Transaction> transactions = viewModel.getRangeTransactions().getValue();
             if (transactions != null) updateBudgetCard(transactions);
         });
 
@@ -525,7 +535,7 @@ public class RecordFragment extends Fragment {
             if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(View.VISIBLE);
             if (rvBudgetPlans != null) rvBudgetPlans.setVisibility(View.VISIBLE);
             if (rvBudgetPlans != null && rvBudgetPlans.getAdapter() != null) rvBudgetPlans.getAdapter().notifyDataSetChanged();
-            updateTodayBudgetForActivePlans(transactions);
+            updateTodayBudgetForActivePlans();
             return;
         }
 
@@ -613,12 +623,11 @@ public class RecordFragment extends Fragment {
         }
     }
 
-    private void updateTodayBudgetForActivePlans(List<Transaction> transactions) {
+    private void updateTodayBudgetForActivePlans() {
         LocalDate day = selectedDate != null ? selectedDate : LocalDate.now();
         // 日历查询只覆盖当前月份，计划可能从上个月开始；预算累计必须使用全量交易，
         // 否则总卡片会漏算计划开始日至本月首日之间的支出。
-        List<Transaction> budgetTransactions = viewModel.getAllTransactions().getValue();
-        if (budgetTransactions == null) budgetTransactions = transactions;
+        List<Transaction> budgetTransactions = fullTransactionHistory;
         double totalDaily = 0;
         LocalDate calculationDay = day.isAfter(LocalDate.now()) ? LocalDate.now() : day;
         for (BudgetPlan plan : activeBudgetPlans) {
@@ -659,7 +668,7 @@ public class RecordFragment extends Fragment {
             BudgetPlan plan = activeBudgetPlans.get(position);
             LocalDate day = selectedDate != null ? selectedDate : LocalDate.now();
             LocalDate calculationDay = day.isAfter(LocalDate.now()) ? LocalDate.now() : day;
-            List<Transaction> tx = viewModel.getAllTransactions().getValue();
+            List<Transaction> tx = fullTransactionHistory;
             long spentEnd = calculationDay.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
             double spent = BudgetCalculator.expenseBetween(tx, plan.startDate, spentEnd);
             h.name.setText(plan.name);
