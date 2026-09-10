@@ -69,6 +69,18 @@ public class BudgetCalculatorTest {
     }
 
     @Test
+    public void remainingDailyBudget_doesNotShrinkTodayFromTodaySpending() {
+        LocalDate start = LocalDate.of(2026, 1, 1);
+        LocalDate end = LocalDate.of(2026, 1, 2);
+        BudgetPlan plan = new BudgetPlan("test", millis(start), millis(end), 100);
+        Transaction firstDay = new Transaction(millis(start) + 1000, 0, "餐饮", 40);
+        List<Transaction> transactions = Arrays.asList(firstDay);
+
+        assertEquals(50, BudgetCalculator.remainingDailyBudget(plan, start, transactions), 0.000001);
+        assertEquals(60, BudgetCalculator.remainingDailyBudget(plan, end, transactions), 0.000001);
+    }
+
+    @Test
     public void expenseBetween_amortizesTransactionAcrossRange() {
         LocalDate purchase = LocalDate.of(2026, 1, 1);
         Transaction transaction = new Transaction(millis(purchase), 0, "购物", 10.01);

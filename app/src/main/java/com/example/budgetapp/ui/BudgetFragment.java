@@ -731,13 +731,13 @@ public class BudgetFragment extends Fragment {
             List<Transaction> transactions = viewModel.getAllTransactions().getValue();
             double spent = com.example.budgetapp.util.BudgetCalculator.expenseBetween(transactions, plan.startDate, Math.min(System.currentTimeMillis(), endExclusive));
             double remaining = Math.max(0, plan.totalAmount - spent);
-            long days = end.toEpochDay() - today.toEpochDay() + 1;
             h.name.setText(plan.name);
             h.effective.setText("生效至 " + end);
             h.remaining.setText(String.format("%.2f", remaining));
             h.spent.setText(String.format("已消耗 %.2f", spent));
             h.total.setText(String.format("%.2f", plan.totalAmount));
-            h.daily.setText(String.format("%.2f", days > 0 ? remaining / days : 0));
+            h.daily.setText(String.format("%.2f",
+                    BudgetCalculator.remainingDailyBudget(plan, today, transactions)));
             h.progress.setProgress(com.example.budgetapp.util.BudgetCalculator.progress(spent, plan.totalAmount));
             h.progress.setProgressTintList(ColorStateList.valueOf(ContextCompat.getColor(requireContext(),
                     spent > plan.totalAmount ? R.color.budget_progress_exceed : R.color.app_blue)));

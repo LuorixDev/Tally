@@ -658,11 +658,8 @@ public class RecordFragment extends Fragment {
         double totalDaily = 0;
         LocalDate calculationDay = day.isAfter(LocalDate.now()) ? LocalDate.now() : day;
         for (BudgetPlan plan : activeBudgetPlans) {
-            LocalDate end = Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate();
-            long spentEnd = calculationDay.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            double spentToDate = BudgetCalculator.expenseBetween(budgetTransactions, plan.startDate, spentEnd);
-            long remainingDays = end.toEpochDay() - calculationDay.toEpochDay() + 1;
-            if (remainingDays > 0) totalDaily += Math.max(0, plan.totalAmount - spentToDate) / remainingDays;
+            totalDaily += BudgetCalculator.remainingDailyBudget(
+                    plan, calculationDay, budgetTransactions);
         }
         long ds = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
         long de = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
@@ -703,8 +700,7 @@ public class RecordFragment extends Fragment {
             h.progress.setProgress(BudgetCalculator.progress(spent, plan.totalAmount));
             h.progress.setProgressTintList(ColorStateList.valueOf(ContextCompat.getColor(requireContext(),
                     spent > plan.totalAmount ? R.color.budget_progress_exceed : R.color.app_blue)));
-            long days = java.time.Instant.ofEpochMilli(plan.endDate).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() - calculationDay.toEpochDay() + 1;
-            double daily = days > 0 ? Math.max(0, plan.totalAmount - spent) / days : 0;
+            double daily = BudgetCalculator.remainingDailyBudget(plan, calculationDay, tx);
             long dayStart = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
             long dayEnd = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
             // 每个计划只统计其自身时间范围内的当日支出，避免多个计划互相串账。

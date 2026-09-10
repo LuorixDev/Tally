@@ -88,6 +88,25 @@ public final class BudgetCalculator {
     }
 
     /**
+     * Budget still available for the selected day, calculated before that day's
+     * spending and spread across the remaining days in the plan. This prevents
+     * spending today from shrinking today's own target after the fact.
+     */
+    public static double remainingDailyBudget(BudgetPlan plan, LocalDate day,
+                                               List<Transaction> transactions) {
+        if (plan == null || day == null) return 0;
+        LocalDate start = toDate(plan.startDate);
+        LocalDate end = toDate(plan.endDate);
+        if (day.isBefore(start) || day.isAfter(end)) return 0;
+
+        long startOfDay = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        double spentBeforeDay = expenseBetween(transactions, plan.startDate, startOfDay);
+        long remainingDays = end.toEpochDay() - day.toEpochDay() + 1;
+        if (remainingDays <= 0) return 0;
+        return Math.max(0, plan.totalAmount - spentBeforeDay) / remainingDays;
+    }
+
+    /**
      * Returns the exact budget slice for a day in the plan period. Amounts are
      * allocated in cents, so the slices add up to the plan total after normal
      * currency rounding instead of accumulating floating-point division error.
