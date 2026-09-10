@@ -36,6 +36,9 @@ public interface TransactionDao {
     @Query("SELECT SUM(amount) FROM transactions WHERE date >= :start AND date <= :end AND type = 1 AND category = '加班'")
     Double getOvertimeTotalAmountSync(long start, long end);
 
+    @Query("SELECT SUM(amount) FROM transactions WHERE assetId = :assetId AND type = 1 AND category = '理财收益'")
+    Double getInvestmentInterestTotalSync(int assetId);
+
     // 【新增】小组件使用：同步查询指定时间段所有加班记录（用于计算时长）
     @Query("SELECT * FROM transactions WHERE date >= :start AND date <= :end AND type = 1 AND category = '加班'")
     List<Transaction> getOvertimeTransactionsSync(long start, long end);

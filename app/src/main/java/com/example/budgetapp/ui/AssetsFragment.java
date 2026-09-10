@@ -1085,13 +1085,9 @@ private String formatMultiCurrency(Map<String, Double> map) {
                     double annualRate = Double.parseDouble(rateStr) / 100.0;
                     int months = Integer.parseInt(durationStr);
 
-                    double expected = 0;
-                    // 判断是否选择复利（1 为复利，0 为单利）
-                    if (spinnerInterestType.getSelectedItemPosition() == 1) {
-                        expected = principal * Math.pow(1 + (annualRate / 12.0), months);
-                    } else {
-                        expected = principal + (principal * annualRate * (months / 12.0));
-                    }
+                    double expected = com.example.budgetapp.util.InterestCalculator.expectedReturn(
+                            principal, annualRate * 100.0, months,
+                            spinnerInterestType.getSelectedItemPosition() == 1);
 
                     etExpected.setText(String.format("预计结算资产: %.2f", expected));
                 } else {
@@ -1313,11 +1309,9 @@ private String formatMultiCurrency(Map<String, Double> map) {
                     }
                     accountToSave.interestRate = annualRate;
 
-                    if (accountToSave.isCompoundInterest) {
-                        accountToSave.expectedReturn = amount * Math.pow(1 + ((annualRate / 100.0) / 12.0), accountToSave.durationMonths);
-                    } else {
-                        accountToSave.expectedReturn = amount + (amount * (annualRate / 100.0) * (accountToSave.durationMonths / 12.0));
-                    }
+                    accountToSave.expectedReturn = com.example.budgetapp.util.InterestCalculator.expectedReturn(
+                            amount, annualRate, accountToSave.durationMonths,
+                            accountToSave.isCompoundInterest);
                 } catch (Exception e) {
                     accountToSave.durationMonths = 0;
                     accountToSave.interestRate = 0.0;
