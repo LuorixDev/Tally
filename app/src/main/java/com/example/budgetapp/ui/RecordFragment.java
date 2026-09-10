@@ -530,6 +530,8 @@ public class RecordFragment extends Fragment {
     private void updateBudgetCard(List<Transaction> transactions) {
         if (transactions == null || getContext() == null) return;
         updateActiveBudgetPlansForSelectedDate();
+        // 日历预算底色属于当前月份配置，不应随所选日期是否命中预算计划而开关。
+        updateCalendarBudgetStyle();
 
         if (!activeBudgetPlans.isEmpty()) {
             if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(View.VISIBLE);
@@ -543,7 +545,6 @@ public class RecordFragment extends Fragment {
         // leak into dates that are outside every plan.
         if (!budgetPlans.isEmpty()) {
             if (cardBudgetStatus != null) cardBudgetStatus.setVisibility(View.GONE);
-            adapter.setBudgetConfig(false, 0);
             updateBillSlider(transactions);
             return;
         }
@@ -600,12 +601,38 @@ public class RecordFragment extends Fragment {
             cardBudgetStatus.setVisibility(View.GONE);
         }
 
-        // 核心：把过滤后的状态传给日历适配器。
-        // 如果 finalBudgetEnabled 为 false（比如查看去年的账单），日历背景色就不会变
-        adapter.setBudgetConfig(finalBudgetEnabled, monthlyBudget);
-
         // 更新账单卡片（如果开启了账单卡片替换功能）
         updateBillSlider(transactions);
+    }
+
+    private void updateCalendarBudgetStyle() {
+        if (adapter == null || currentMonth == null || getContext() == null) return;
+
+        SharedPreferences prefs = requireContext().getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
+        boolean isBudgetEnabled = prefs.getBoolean("is_budget_enabled", false);
+        boolean isDetailedEnabled = prefs.getBoolean("is_detailed_budget_enabled", false);
+
+        long budgetStartTime = prefs.getLong("budget_start_time", 0);
+        boolean isEffectiveMonth = true;
+        if (budgetStartTime > 0) {
+            YearMonth startMonth = YearMonth.from(
+                    Instant.ofEpochMilli(budgetStartTime).atZone(ZoneId.systemDefault()).toLocalDate());
+            isEffectiveMonth = !currentMonth.isBefore(startMonth);
+        }
+
+        float monthlyBudget = 0f;
+        if (isDetailedEnabled) {
+            List<String> expenseCategories = CategoryManager.getExpenseCategories(requireContext());
+            for (String category : expenseCategories) {
+                monthlyBudget += prefs.getFloat("budget_cat_" + category, 0f);
+            }
+        } else {
+            String monthKey = "budget_" + currentMonth.getYear() + "_" + currentMonth.getMonthValue();
+            float defaultBudget = prefs.getFloat("monthly_budget", 0f);
+            monthlyBudget = prefs.getFloat(monthKey, defaultBudget);
+        }
+
+        adapter.setBudgetConfig(isBudgetEnabled && isEffectiveMonth, monthlyBudget);
     }
 
     private void updateActiveBudgetPlansForSelectedDate() {

@@ -42,9 +42,10 @@ public class CalendarAdapter extends RecyclerView.Adapter<CalendarAdapter.ViewHo
 
     // 增加一个公开方法用于接收配置
     public void setBudgetConfig(boolean enabled, float budget) {
+        boolean changed = isBudgetEnabled != enabled || Math.abs(monthlyBudget - budget) > 0.001f;
         this.isBudgetEnabled = enabled;
         this.monthlyBudget = budget;
-        notifyDataSetChanged();
+        if (changed) notifyDataSetChanged();
     }
 
     public interface OnDateClickListener {
@@ -79,8 +80,14 @@ public class CalendarAdapter extends RecyclerView.Adapter<CalendarAdapter.ViewHo
     }
 
     public void setSelectedDate(LocalDate date) {
+        LocalDate previousDate = selectedDate;
         this.selectedDate = date;
-        notifyDataSetChanged();
+        int previousPosition = previousDate == null ? -1 : days.indexOf(previousDate);
+        int newPosition = date == null ? -1 : days.indexOf(date);
+
+        if (previousPosition >= 0) notifyItemChanged(previousPosition);
+        if (newPosition >= 0 && newPosition != previousPosition) notifyItemChanged(newPosition);
+        if (previousPosition < 0 && newPosition < 0) notifyDataSetChanged();
     }
 
     private int getThemeColor(Context context, int attr) {
