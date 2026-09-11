@@ -608,6 +608,18 @@ public class RecordFragment extends Fragment {
     private void updateCalendarBudgetStyle() {
         if (adapter == null || currentMonth == null || getContext() == null) return;
 
+        boolean hasEnabledPlan = false;
+        for (BudgetPlan plan : budgetPlans) {
+            if (plan.enabled && plan.totalAmount > 0) {
+                hasEnabledPlan = true;
+                break;
+            }
+        }
+        if (hasEnabledPlan) {
+            adapter.setBudgetPlanConfig(budgetPlans, fullTransactionHistory);
+            return;
+        }
+
         SharedPreferences prefs = requireContext().getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
         boolean isBudgetEnabled = prefs.getBoolean("is_budget_enabled", false);
         boolean isDetailedEnabled = prefs.getBoolean("is_detailed_budget_enabled", false);
